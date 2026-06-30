@@ -1,0 +1,165 @@
+@config "../tailwind.config.ts";
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: #172033;
+  -webkit-font-smoothing: antialiased;
+}
+
+.field {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid #cbd5e1;
+  background: white;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  outline: none;
+}
+
+.field:focus {
+  border-color: #155e75;
+  box-shadow: 0 0 0 3px rgba(21, 94, 117, 0.15);
+}
+
+/* ── 홈 "커서가 왔다갔다 레이어를 놓는" 미리보기 데모 애니메이션 (7s 한 사이클) ── */
+@keyframes dbCursor {
+  0%   { transform: translate(116px, 14px); }   /* 팔레트(우상단)에서 집기 */
+  12%  { transform: translate(60px, 72px); }    /* 1번 자리로 이동 */
+  17%  { transform: translate(60px, 78px); }    /* 누름 */
+  26%  { transform: translate(116px, 14px); }   /* 복귀 */
+  38%  { transform: translate(60px, 50px); }    /* 2번 자리 */
+  43%  { transform: translate(60px, 56px); }
+  52%  { transform: translate(116px, 14px); }
+  64%  { transform: translate(60px, 28px); }    /* 3번 자리 */
+  69%  { transform: translate(60px, 34px); }
+  80%  { transform: translate(116px, 14px); }
+  100% { transform: translate(116px, 14px); }
+}
+@keyframes dbPlaceA {
+  0%, 15% { opacity: 0; transform: translateY(-7px) scale(0.92); }
+  19% { opacity: 1; transform: translateY(2px) scale(1.05); }
+  23% { transform: translateY(0) scale(1); }
+  92% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-7px) scale(0.92); }
+}
+@keyframes dbPlaceB {
+  0%, 41% { opacity: 0; transform: translateY(-7px) scale(0.92); }
+  45% { opacity: 1; transform: translateY(2px) scale(1.05); }
+  49% { transform: translateY(0) scale(1); }
+  92% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-7px) scale(0.92); }
+}
+@keyframes dbPlaceC {
+  0%, 67% { opacity: 0; transform: translateY(-7px) scale(0.92); }
+  71% { opacity: 1; transform: translateY(2px) scale(1.05); }
+  75% { transform: translateY(0) scale(1); }
+  92% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-7px) scale(0.92); }
+}
+@keyframes dbSparkA { 0%, 16% { opacity: 0; transform: scale(0); } 20% { opacity: 1; transform: scale(1.2); } 28%, 100% { opacity: 0; transform: scale(0); } }
+@keyframes dbSparkB { 0%, 42% { opacity: 0; transform: scale(0); } 46% { opacity: 1; transform: scale(1.2); } 54%, 100% { opacity: 0; transform: scale(0); } }
+@keyframes dbSparkC { 0%, 68% { opacity: 0; transform: scale(0); } 72% { opacity: 1; transform: scale(1.2); } 80%, 100% { opacity: 0; transform: scale(0); } }
+@keyframes dbFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes dbBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes dbRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.db-cursor { animation: dbCursor 7s ease-in-out infinite; }
+.db-place-a { animation: dbPlaceA 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.db-place-b { animation: dbPlaceB 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.db-place-c { animation: dbPlaceC 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.db-spark-a { animation: dbSparkA 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.db-spark-b { animation: dbSparkB 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.db-spark-c { animation: dbSparkC 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.db-float { animation: dbFloat 4s ease-in-out infinite; }
+.db-bob { animation: dbBob 3s ease-in-out infinite; }
+.db-rise { animation: dbRise 0.6s ease both; }
+
+/* ── 시작 방법 카드 애니메이션 ── */
+@keyframes stTile {
+  0% { opacity: 0; transform: scale(0.5); }
+  10% { opacity: 1; transform: scale(1.12); }
+  16% { transform: scale(1); }
+  80% { opacity: 1; transform: scale(1); }
+  92% { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(0.5); }
+}
+@keyframes stBolt {
+  0%, 58% { opacity: 0; transform: scale(0.6); }
+  70% { opacity: 1; transform: scale(1.25); }
+  82% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+@keyframes stResize { 0%, 100% { transform: scale(0.84); } 50% { transform: scale(1.06); } }
+@keyframes stHandle { 0%, 100% { transform: translate(-7px, -5px); } 50% { transform: translate(7px, 5px); } }
+@keyframes stCursor2 { 0%, 100% { transform: translate(-2px, -1px); } 50% { transform: translate(10px, 7px); } }
+@keyframes stTap {
+  0% { transform: translate(28px, 20px); }
+  10% { transform: translate(28px, 25px); }
+  18% { transform: translate(66px, 20px); }
+  21% { transform: translate(66px, 25px); }
+  28% { transform: translate(28px, 52px); }
+  31% { transform: translate(28px, 57px); }
+  38% { transform: translate(66px, 52px); }
+  41% { transform: translate(66px, 57px); }
+  52% { transform: translate(50px, 40px); }
+  100% { transform: translate(50px, 40px); }
+}
+.st-tile { animation: stTile 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.st-tap { animation: stTap 2.6s ease-in-out infinite; }
+.st-bolt { animation: stBolt 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.st-resize { animation: stResize 2.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.st-handle { animation: stHandle 2.8s ease-in-out infinite; }
+.st-cursor2 { animation: stCursor2 2.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .db-cursor, .db-place-a, .db-place-b, .db-place-c, .db-spark-a, .db-spark-b, .db-spark-c, .db-float, .db-bob, .db-rise,
+  .st-tile, .st-tap, .st-bolt, .st-resize, .st-handle, .st-cursor2 {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.factory-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  font-size: 1.05rem;
+}
+
+.factory-table th,
+.factory-table td {
+  border: 1px solid #cbd5e1;
+  padding: 0.9rem;
+  text-align: left;
+}
+
+.factory-table th {
+  background: #f1f5f9;
+  font-weight: 900;
+}
+
+@media print {
+  header,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+}

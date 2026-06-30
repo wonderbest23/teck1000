@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+dist
+.env*.local
+.vercel
+.open-next
+.wrangler
+.dev.vars
+.claude
+tsconfig.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
