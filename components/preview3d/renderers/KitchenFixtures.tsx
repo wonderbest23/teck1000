@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import * as THREE from "three";
 import { KITCHEN_COUNTERTOP_M } from "@/components/preview3d/constants";
 import { getSinkFixtureSpec } from "@/components/preview3d/kitchen/sinkFixtureSpec";
 import { Trim } from "@/components/preview3d/primitives";
@@ -96,6 +98,27 @@ export function CountertopWithCutout({
 }
 
 // 일반 상판+스텐볼: 림은 폴리시(밝고 매끈), 내부는 헤어라인(어둡고 결) — 상판과 또렷한 대비
+// 스테인리스 헤어라인(브러시드) 텍스처 — 캔버스로 1회 생성해 공유
+let hairlineTexture: THREE.Texture | null = null;
+function getHairlineTexture() {
+  if (hairlineTexture) return hairlineTexture;
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#cdd4da";
+  ctx.fillRect(0, 0, 128, 128);
+  for (let y = 0; y < 128; y += 1) {
+    const a = 0.04 + Math.random() * 0.08;
+    ctx.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${a})` : `rgba(30,40,48,${a})`;
+    ctx.fillRect(0, y, 128, 1);
+  }
+  hairlineTexture = new THREE.CanvasTexture(canvas);
+  hairlineTexture.wrapS = hairlineTexture.wrapT = THREE.RepeatWrapping;
+  hairlineTexture.repeat.set(3, 1.5);
+  return hairlineTexture;
+}
+
 const SINK_RIM_POLISHED = { color: "#cdd5db", metalness: 0.92, roughness: 0.16 } as const;
 const SINK_STEEL_BRUSHED = { color: "#8d979f", metalness: 0.82, roughness: 0.34 } as const;
 // 스텐 상판 일체형: 상판과 같은 톤으로 프레스 성형된 느낌(림 거의 없음)
@@ -120,6 +143,7 @@ export function SinkFixture({
   countertopId?: string;
   onPointerDown?: (clientX: number, clientY: number) => void;
 }) {
+  const hairTex = useMemo(() => getHairlineTexture(), []);
   const steelTop = countertopId === "stainless";
   const RIM = steelTop ? SINK_STEEL_TOP : SINK_RIM_POLISHED;
   const INNER = steelTop ? SINK_STEEL_TOP : SINK_STEEL_BRUSHED;
@@ -172,31 +196,38 @@ export function SinkFixture({
       {/* 볼 내부 — 열린 윗면: 4벽 + 바닥 (컷아웃 구멍으로 실제 내부가 보인다) */}
       <mesh position={[x, topY - bowlDepth / 2, zC - d / 2 + wallT / 2]}>
         <boxGeometry args={[w, bowlDepth, wallT]} />
-        <meshStandardMaterial {...INNER} />
+        <meshStandardMaterial {...INNER} map={hairTex} />
       </mesh>
       <mesh position={[x, topY - bowlDepth / 2, zC + d / 2 - wallT / 2]}>
         <boxGeometry args={[w, bowlDepth, wallT]} />
-        <meshStandardMaterial {...INNER} />
+        <meshStandardMaterial {...INNER} map={hairTex} />
       </mesh>
       <mesh position={[x - w / 2 + wallT / 2, topY - bowlDepth / 2, zC]}>
         <boxGeometry args={[wallT, bowlDepth, d]} />
-        <meshStandardMaterial {...INNER} />
+        <meshStandardMaterial {...INNER} map={hairTex} />
       </mesh>
       <mesh position={[x + w / 2 - wallT / 2, topY - bowlDepth / 2, zC]}>
         <boxGeometry args={[wallT, bowlDepth, d]} />
-        <meshStandardMaterial {...INNER} />
+        <meshStandardMaterial {...INNER} map={hairTex} />
       </mesh>
       {/* 더블볼 분리대 */}
       {isDouble && (
         <mesh position={[x, topY - bowlDepth / 2, zC]}>
           <boxGeometry args={[wallT * 1.6, bowlDepth, d - wallT * 2]} />
-          <meshStandardMaterial {...INNER} />
+          <meshStandardMaterial {...INNER} map={hairTex} />
         </mesh>
       )}
+      {/* 모서리 라운드 — 4귀퉁이 세로 필렛(직각 티 안 나게) */}
+      {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz], i) => (
+        <mesh key={`fillet-${i}`} position={[x + sx * (w / 2 - wallT), topY - bowlDepth / 2, zC + sz * (d / 2 - wallT)]}>
+          <cylinderGeometry args={[wallT * 1.6, wallT * 1.6, bowlDepth, 12]} />
+          <meshStandardMaterial {...INNER} map={hairTex} />
+        </mesh>
+      ))}
       {/* 바닥(배수 방향으로 살짝 어둡게) + 배수구 */}
       <mesh position={[x, bowlBottomY + 0.005, zC]}>
         <boxGeometry args={[w - wallT, 0.01, d - wallT]} />
-        <meshStandardMaterial color={steelTop ? "#8b959d" : "#79838b"} metalness={0.78} roughness={0.4} />
+        <meshStandardMaterial color={steelTop ? "#98a2aa" : "#8a949c"} metalness={0.78} roughness={0.4} map={hairTex} />
       </mesh>
       {drainXs.map((dx, i) => (
         <mesh key={`drain-${i}`} position={[dx, bowlBottomY + 0.012, zC + d * 0.12]} rotation={[-Math.PI / 2, 0, 0]}>
