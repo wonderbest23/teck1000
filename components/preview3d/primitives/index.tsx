@@ -203,6 +203,22 @@ function TopHandle({ doorHeight, color }: { doorHeight: number; color: string })
   return <Trim size={[0.14, 0.018, 0.024]} position={[0, doorHeight * 0.38, 0.026]} color={color} />;
 }
 
+/** 컵 힌지(경첩) — 문 뒷면 경첩 모서리에 부착되어 문과 함께 회전한다. 컵(원통) + 힌지암(플레이트) */
+function Hinge({ x, y, z, armDirX = 0, armDirY = 0 }: { x: number; y: number; z: number; armDirX?: number; armDirY?: number }) {
+  return (
+    <group position={[x, y, z]}>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.016, 0.016, 0.012, 14]} />
+        <meshStandardMaterial color="#aeb6bd" metalness={0.75} roughness={0.32} />
+      </mesh>
+      <mesh position={[armDirX * 0.024, armDirY * 0.024, -0.004]}>
+        <boxGeometry args={[armDirX !== 0 ? 0.05 : 0.016, armDirY !== 0 ? 0.05 : 0.016, 0.012]} />
+        <meshStandardMaterial color="#99a2aa" metalness={0.7} roughness={0.4} />
+      </mesh>
+    </group>
+  );
+}
+
 function DoorLeaf({
   index,
   width,
@@ -275,6 +291,23 @@ function DoorLeaf({
         {!transparent && showHandles && hingeSide === "side" && <SideHandle x={handleX} color={material.edge} />}
         {!transparent && showHandles && isBottomHinge && <TopHandle doorHeight={doorHeight} color={material.edge} />}
         {!transparent && showHandles && isTopHinge && <BottomHandle doorHeight={doorHeight} color={material.edge} />}
+        {/* 경첩 — 경첩 쪽 모서리 안쪽(문 뒷면), 키 큰 문은 3개. 서랍(DrawerStack)에는 문이 없어 자동으로 제외 */}
+        {!transparent && hingeSide === "side" && doorWidth > 0.16 && (() => {
+          const sign = hingeOnRight ? 1 : -1;
+          const hx = sign * (doorWidth / 2 - 0.03);
+          const count = doorHeight > 1.5 ? 3 : 2;
+          const inset = Math.min(0.11, doorHeight * 0.2);
+          const ys = count === 3 ? [doorHeight / 2 - inset, 0, -(doorHeight / 2 - inset)] : [doorHeight / 2 - inset, -(doorHeight / 2 - inset)];
+          return ys.map((hy, i) => <Hinge key={`hinge-${i}`} x={hx} y={hy} z={-thickness * 0.5 - 0.008} armDirX={sign} />);
+        })()}
+        {!transparent && isHorizontalHinge && doorWidth > 0.16 && (() => {
+          const sign = isTopHinge ? 1 : -1;
+          const hy = sign * (doorHeight / 2 - 0.03);
+          const inset = Math.min(0.12, doorWidth * 0.2);
+          return [doorWidth / 2 - inset, -(doorWidth / 2 - inset)].map((hx, i) => (
+            <Hinge key={`hinge-h-${i}`} x={hx} y={hy} z={-thickness * 0.5 - 0.008} armDirY={sign} />
+          ));
+        })()}
       </group>
     </group>
   );

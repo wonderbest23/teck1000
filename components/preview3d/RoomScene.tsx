@@ -723,22 +723,87 @@ export function RoomScene({
       </SceneSizePanel>
     );
   } else if (editable && selectedItem) {
+    const sInput = selectedItem.input;
+    const isStorage = ["custom_shelf", "gap_cabinet", "shoe_cabinet"].includes(sInput.productType);
+    const isWardrobeItem = sInput.productType === "built_in_wardrobe";
+    const patchItem = (patch: Partial<FurnitureInput>) => onCommitItem(selectedItem.id, { ...sInput, ...patch });
+    const storageDrawerCount = Math.min(4, Math.max(0, Math.round(sInput.storage_drawer_count ?? 0)));
+    const isSliding = (sInput.open_type ?? "").includes("슬라이딩");
+    const rows: SizeGroup["rows"] = [
+      { key: "width", label: "가로", value: sInput.width_mm, min: 150, max: 3000, step: 50, onChange: (mm) => onResize(selectedItem.id, { width_mm: mm }) },
+      { key: "height", label: "높이", value: sInput.height_mm, min: 120, max: 2800, step: 50, onChange: (mm) => onResize(selectedItem.id, { height_mm: mm }) },
+      { key: "depth", label: "깊이", value: sInput.depth_mm, min: 150, max: 3000, step: 50, onChange: (mm) => onResize(selectedItem.id, { depth_mm: mm }) },
+    ];
+    if (isStorage) {
+      rows.push({ key: "drawers", label: "서랍", value: storageDrawerCount, min: 0, max: 4, step: 1, onChange: (n) => patchItem({ storage_drawer_count: Math.min(4, Math.max(0, Math.round(n))) }) });
+    }
     renderSizePanel = (variant) => (
       <SceneSizePanel
         variant={variant}
         title={selectedItem.name}
-        groups={[{
-          rows: [
-            { key: "width", label: "가로", value: selectedItem.input.width_mm, min: 150, max: 3000, step: 50, onChange: (mm) => onResize(selectedItem.id, { width_mm: mm }) },
-            { key: "height", label: "높이", value: selectedItem.input.height_mm, min: 120, max: 2800, step: 50, onChange: (mm) => onResize(selectedItem.id, { height_mm: mm }) },
-            { key: "depth", label: "깊이", value: selectedItem.input.depth_mm, min: 150, max: 3000, step: 50, onChange: (mm) => onResize(selectedItem.id, { depth_mm: mm }) },
-          ],
-        }]}
-        materials={panelMaterials(selectedItem.input, (next) => onCommitItem(selectedItem.id, next))}
+        groups={[{ rows }]}
+        materials={panelMaterials(sInput, (next) => onCommitItem(selectedItem.id, next))}
         actions={panelActions}
         notice={selectedNotice}
         onClose={() => onSelect(null)}
-      />
+      >
+        {(isStorage || isWardrobeItem) && (
+          <div className="space-y-1.5">
+            {/* 문 열림 방식 — 여닫이(좌/우/양개) 또는 슬라이딩 */}
+            {(sInput.has_door || sInput.productType === "gap_cabinet") && (
+              <div className="flex items-center gap-1">
+                <span className="w-8 shrink-0 text-[10px] font-black text-slate-500">문</span>
+                {isWardrobeItem ? (
+                  ([["swing", "여닫이"], ["sliding", "슬라이딩"]] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => patchItem({ open_type: id === "sliding" ? "슬라이딩" : "여닫이" })}
+                      className={`flex-1 rounded-lg px-1.5 py-1.5 text-[10px] font-black transition ${(id === "sliding") === isSliding ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                    >
+                      {label}
+                    </button>
+                  ))
+                ) : (
+                  ([["pair", "양개"], ["left", "좌개"], ["right", "우개"], ["sliding", "슬라이딩"]] as const).map(([id, label]) => {
+                    const active = id === "sliding" ? isSliding : !isSliding && (sInput.door_swing ?? "pair") === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() =>
+                          id === "sliding"
+                            ? patchItem({ open_type: "슬라이딩", has_door: true })
+                            : patchItem({ open_type: "여닫이", door_swing: id, has_door: true })
+                        }
+                        className={`flex-1 rounded-lg px-1 py-1.5 text-[10px] font-black transition ${active ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+            {/* 서랍통 사양 — 서랍이 있을 때만 */}
+            {isStorage && storageDrawerCount > 0 && (
+              <div className="flex items-center gap-1">
+                <span className="w-8 shrink-0 text-[10px] font-black text-slate-500">서랍통</span>
+                {([["pb15", "기본 PB 15T"], ["birch12", "자작합판 12T"]] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => patchItem({ drawer_box_spec: id })}
+                    className={`flex-1 rounded-lg px-1 py-1.5 text-[10px] font-black transition ${(sInput.drawer_box_spec ?? "pb15") === id ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </SceneSizePanel>
     );
   }
 

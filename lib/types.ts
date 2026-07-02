@@ -47,6 +47,10 @@ export type FurnitureInput = {
   microwave_option?: string;
   drawer_module_count?: number;
   pullout_module_count?: number;
+  /** 수납장(선반장/틈새장/신발장) 하단 서랍 단수 (0=없음, 최대 4) — 부품·레일 하드웨어에 반영 */
+  storage_drawer_count?: number;
+  /** 서랍통(서랍 몸통) 사양 — 기본 PB 15T / 자작합판 12T */
+  drawer_box_spec?: "pb15" | "birch12";
   kitchen_modules_mm?: number[];
   kitchen_base_modules_mm?: number[];
   kitchen_wall_modules_mm?: number[];

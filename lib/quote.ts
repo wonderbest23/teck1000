@@ -81,6 +81,43 @@ function doorParts(input: FurnitureInput): Part[] {
   ];
 }
 
+/** 수납장(선반/틈새/신발장) 하단 서랍 부품 — 앞판 + 서랍통(사양: PB15T/자작12T) + 바닥. 레일은 하드웨어 목록에서. */
+function storageDrawerParts(input: FurnitureInput): Part[] {
+  const count = Math.min(4, Math.max(0, Math.round(input.storage_drawer_count ?? 0)));
+  if (count === 0) return [];
+  const inner = Math.max(input.width_mm - BOARD_THICKNESS_MM * 2, 1);
+  const box = input.drawer_box_spec === "birch12"
+    ? { material: "자작합판 12T", color: "자작" }
+    : { material: "PB 15T", color: "화이트" };
+  return [
+    { name: "서랍 앞판", width_mm: Math.max(inner - 4, 1), height_mm: 180, quantity: count, material: input.material, color: input.color, note: `하단 서랍 ${count}단 · ${doorStyleLabel(input.door_style)} · 4면 엣지` },
+    { name: "서랍통 측판", width_mm: Math.max(input.depth_mm - 50, 1), height_mm: 120, quantity: count * 2, ...box, note: "서랍통 좌우" },
+    { name: "서랍통 앞뒤판", width_mm: Math.max(inner - 40, 1), height_mm: 120, quantity: count * 2, ...box, note: "서랍통 전후" },
+    { name: "서랍통 바닥", width_mm: Math.max(inner - 20, 1), height_mm: Math.max(input.depth_mm - 50, 1), quantity: count, ...box, note: "서랍 바닥판" },
+  ];
+}
+
+/** 수납장 문 부품 — 여닫이(경첩식) 또는 슬라이딩 도어 2짝. 하단 서랍 구역만큼 문 높이를 차감한다. */
+function storageDoorParts(input: FurnitureInput): Part[] {
+  const drawerCount = Math.min(4, Math.max(0, Math.round(input.storage_drawer_count ?? 0)));
+  const doorHeight = Math.max(input.height_mm - (drawerCount > 0 ? drawerCount * 200 + 18 : 0) - 4, 1);
+  if ((input.open_type ?? "").includes("슬라이딩")) {
+    if (!input.has_door) return [];
+    return [
+      {
+        name: "슬라이딩 도어",
+        width_mm: Math.max(Math.floor((input.width_mm + 40) / 2), 1),
+        height_mm: doorHeight,
+        quantity: 2,
+        material: input.material,
+        color: input.color,
+        note: `알루미늄 프레임 슬라이딩 · ${doorStyleLabel(input.door_style)}`,
+      },
+    ];
+  }
+  return doorParts({ ...input, height_mm: doorHeight + 4 });
+}
+
 function prefixParts(parts: Part[], prefix: string): Part[] {
   return parts.map((part) => ({ ...part, name: `${prefix} ${part.name}` }));
 }
@@ -94,11 +131,12 @@ function moduleBodyParts(input: FurnitureInput, widthMm: number, heightMm: numbe
 
 export function generateParts(productType: ProductType, input: FurnitureInput): Part[] {
   if (productType === "custom_shelf") {
-    return bodyParts(input, "선반", Boolean(input.back_panel));
+    // 문짝(여닫이/슬라이딩)·하단 서랍도 부품에 포함 — 미리보기에 보이면 부품표에도 있어야 한다(허상 없음)
+    return [...bodyParts(input, "선반", Boolean(input.back_panel)), ...storageDoorParts(input), ...storageDrawerParts(input)];
   }
 
   if (productType === "gap_cabinet") {
-    return [...bodyParts(input, "선반", true), ...doorParts(input)];
+    return [...bodyParts(input, "선반", true), ...storageDoorParts(input), ...storageDrawerParts(input)];
   }
 
   if (productType === "kitchen_base_cabinet") {
@@ -347,7 +385,7 @@ export function generateParts(productType: ProductType, input: FurnitureInput): 
 
   // shoe_cabinet
   const shoeBody = bodyParts({ ...input, shelf_count: input.shelf_count }, "신발 선반", true);
-  const shoeParts: Part[] = [...shoeBody, ...doorParts({ ...input, has_door: true })];
+  const shoeParts: Part[] = [...shoeBody, ...storageDoorParts({ ...input, has_door: true }), ...storageDrawerParts(input)];
   if (input.shoe_shelf_angle) {
     shoeParts.forEach((part) => {
       if (part.name === "신발 선반") part.note = "경사 선반(15° 기울임) 가공";
@@ -422,6 +460,18 @@ export function generateHardwareList(productType: ProductType, input: FurnitureI
     const handleCount = Math.max(0, doorCount - baseNoHandleLeaves - wallNoHandleLeaves);
     tasks.push({ hardware_name: input.handle_type === "댐핑" ? "댐핑 경첩" : "일반 경첩", spec: input.handle_type, quantity: doorCount * 2, unit: "개", note: "문짝 1개당 2개" });
     if (handleCount > 0) tasks.push({ hardware_name: "손잡이", spec: input.handle_type, quantity: handleCount, unit: "개", note: "문짝 1개당 1개 (손잡이 없는 칸 제외)" });
+  }
+
+  // 수납장(선반/틈새/신발장) 하단 서랍 레일 + 슬라이딩 도어 철물
+  if (productType === "custom_shelf" || productType === "gap_cabinet" || productType === "shoe_cabinet") {
+    const storageDrawers = Math.min(4, Math.max(0, Math.round(input.storage_drawer_count ?? 0)));
+    if (storageDrawers > 0) {
+      tasks.push({ hardware_name: "서랍 레일", spec: input.drawer_box_spec === "birch12" ? "볼레일 (자작 서랍통)" : "볼레일", quantity: storageDrawers, unit: "조", note: "서랍 1단당 1조" });
+    }
+    if (input.has_door && (input.open_type ?? "").includes("슬라이딩")) {
+      tasks.push({ hardware_name: "슬라이딩 레일 세트", spec: "상하 알루미늄 레일", quantity: 1, unit: "세트", note: "슬라이딩 도어 2짝 기준" });
+      tasks.push({ hardware_name: "슬라이딩 도어 롤러", spec: "하부 롤러", quantity: 4, unit: "개", note: "도어 1짝당 2개" });
+    }
   }
 
   if (input.height_mm >= 1800 || input.wall_fix_option || productType === "kitchen_wall_cabinet" || productType === "kitchen_full_set") {
