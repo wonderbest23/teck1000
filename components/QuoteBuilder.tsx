@@ -143,6 +143,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const [justAddedId, setJustAddedId] = useState<string | null>(null); // 방금 추가한 가구 — 파란 테두리로 안내
   const [canvasMode, setCanvasMode] = useState<"view" | "edit">("edit"); // 보기/수정 모드 — 보기 모드는 편집 UI 없이 감상만
   const [addOpen, setAddOpen] = useState(false); // 캔버스 하단 '＋ 가구 추가' 시트
+  const [addCat, setAddCat] = useState<string>("kitchen"); // 가구추가 시트의 활성 카테고리(카테고리 우선 탐색)
   // 모바일: 사이즈 패널을 미리보기 위가 아니라 섹션 아래(belowCanvas)에 포털로 렌더 — 화면을 가리지 않게
   const [mobilePanelHost, setMobilePanelHost] = useState<HTMLDivElement | null>(null);
   const [pickerSlug, setPickerSlug] = useState<ProductType | null>(null); // 규격 선택 단계(제품 누르면 사이즈 칩 표시)
@@ -208,15 +209,21 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   function roomLayerOf(id: string): "wall" | "floor" {
     return roomItems.find((it) => it.id === id)?.input.productType === "kitchen_wall_cabinet" ? "wall" : "floor";
   }
+  // 충돌 판정 — 상부장(벽걸이)은 바닥 가구와 평면이 겹쳐도 되지만,
+  // '상하부장 세트'는 상부장까지 포함하므로 어느 레이어와도 겹치면 안 된다(상부장 단품↔세트 겹침 버그 수정)
+  function layersCollide(idA: string, idB: string) {
+    const typeOf = (id: string) => roomItems.find((it) => it.id === id)?.input.productType;
+    if (typeOf(idA) === "kitchen_full_set" || typeOf(idB) === "kitchen_full_set") return true;
+    return roomLayerOf(idA) === roomLayerOf(idB);
+  }
   // 벽/바닥 안쪽으로 클램프 + 다른 가구와 겹치지 않게 밀어냄(경우의수 반복 해소)
   function resolvePlacement(id: string, desiredX: number, desiredZ: number, rotY: number, all: Record<string, Placement>): { x: number; z: number } {
     const { hx, hz } = halfExtents(id, rotY);
     const cl = (v: number, lo: number, hi: number) => (hi < lo ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
     let x = cl(desiredX, roomFloor.leftX + hx, roomFloor.rightX - hx);
     let z = cl(desiredZ, roomFloor.backZ + hz, roomFloor.frontZ - hz);
-    const myLayer = roomLayerOf(id);
     const others = roomItems
-      .filter((it) => it.id !== id && roomLayerOf(it.id) === myLayer)
+      .filter((it) => it.id !== id && layersCollide(id, it.id))
       .map((it) => {
         const p = all[it.id] ?? { x: 0, z: 0, rotY: 0 };
         const e = halfExtents(it.id, p.rotY);
@@ -260,10 +267,10 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
           next[it.id] = { x, z, rotY: existing.rotY };
           if (Math.abs(existing.x - x) > 1e-4 || Math.abs(existing.z - z) > 1e-4) changed = true;
         } else {
-          const newLayer = roomLayerOf(it.id);
+
           // 상부장: 가장 최근 하부장/세트 바로 위(같은 가로 위치, 벽에 붙임)에 자동 배치
           if (it.input.productType === "kitchen_wall_cabinet") {
-            const hostItem = [...roomItems].reverse().find((o) => o.input.productType === "kitchen_base_cabinet" || o.input.productType === "kitchen_full_set");
+            const hostItem = [...roomItems].reverse().find((o) => o.input.productType === "kitchen_base_cabinet");
             const hp = hostItem ? (next[hostItem.id] ?? current[hostItem.id]) : null;
             if (hp) {
               const f = getFootprint(it.input);
@@ -278,7 +285,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
           let r = resolvePlacement(it.id, base.x, base.z, base.rotY, next);
           const collides = (px: number, pz: number) =>
             Object.keys(next).some((oid) => {
-              if (roomLayerOf(oid) !== newLayer) return false;
+              if (!layersCollide(it.id, oid)) return false;
               const op = next[oid];
               const oe = halfExtents(oid, op.rotY);
               return hx + oe.hx - Math.abs(px - op.x) > 0.0015 && hz + oe.hz - Math.abs(pz - op.z) > 0.0015;
@@ -305,9 +312,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     let x = cl(snapG(desiredX), roomFloor.leftX + hx, roomFloor.rightX - hx);
     let z = cl(snapG(desiredZ), roomFloor.backZ + hz, roomFloor.frontZ - hz);
 
-    const myLayer = roomLayerOf(id);
     const others = roomItems
-      .filter((it) => it.id !== id && roomLayerOf(it.id) === myLayer)
+      .filter((it) => it.id !== id && layersCollide(id, it.id))
       .map((it) => {
         const p = all[it.id] ?? { x: 0, z: 0, rotY: 0 };
         const e = halfExtents(it.id, p.rotY);
@@ -419,6 +425,40 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   }
   function endRoomMove() {
     setRoomGuides([]);
+    syncKitchenFinishes();
+  }
+  // 하부장 단품을 세트/다른 하부장 옆에 딱 붙이면(같은 벽·모서리 맞닿음) 걸레받이·상판을
+  // 자동으로 이어받아 한 몸처럼 연결된다 — 실제 시공처럼 라인이 이어짐
+  function syncKitchenFinishes() {
+    const EPS = 0.03;
+    roomItems.forEach((it) => {
+      if (it.input.productType !== "kitchen_base_cabinet") return;
+      const p = roomPlacements[it.id];
+      const f = roomFootprints[it.id];
+      if (!p || !f) return;
+      for (const other of roomItems) {
+        if (other.id === it.id) continue;
+        const ot = other.input.productType;
+        if (ot !== "kitchen_full_set" && ot !== "kitchen_base_cabinet") continue;
+        const op = roomPlacements[other.id];
+        const of2 = roomFootprints[other.id];
+        if (!op || !of2) continue;
+        if (Math.abs(Math.sin(p.rotY - op.rotY)) > 0.02) continue; // 같은 벽(같은 방향)만
+        // 벽 진행 방향 성분으로 좌우 맞닿음 판정
+        const c = Math.cos(op.rotY);
+        const sn = Math.sin(op.rotY);
+        const along = (p.x - op.x) * c - (p.z - op.z) * sn;
+        const perp = (p.x - op.x) * sn + (p.z - op.z) * c;
+        const touching = Math.abs(Math.abs(along) - (f.widthM / 2 + of2.widthM / 2)) < EPS && Math.abs(perp) < 0.1;
+        if (!touching) continue;
+        const src = other.input;
+        const patch: Partial<FurnitureInput> = {};
+        if ((src.countertop_type ?? "none") !== "none" && (it.input.countertop_type ?? "none") === "none") patch.countertop_type = src.countertop_type;
+        if ((src.toe_kick_option ?? "none") !== "none" && (it.input.toe_kick_option ?? "none") === "none") patch.toe_kick_option = src.toe_kick_option;
+        if (Object.keys(patch).length > 0) commitRoomItemById(it.id, { ...it.input, ...patch });
+        break;
+      }
+    });
   }
   function resetRoomLayout() {
     setRoomPlacements(autoArrange(roomItems));
@@ -1354,71 +1394,90 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     </div>
   );
 
-  // '＋ 가구 추가' 시트 내용 — 데스크톱(캔버스 위 반투명 플로팅)과 모바일(섹션 아래)이 공유
+  // '＋ 가구 추가' 시트 — 카테고리 우선 2단 구조: ① 카테고리 탭 → ② 해당 카테고리 상품 타일
+  //   규격이 있는 상품은 타일 자리에서 규격 선택으로 전환(← 뒤로가기) — 아래로 계속 쌓이는 복잡함 제거
+  const activeAddCat = catalogCategories.find((cat) => cat.id === addCat) ?? catalogCategories[0];
   const addSheetBody = (
     <>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] font-black text-ink">가구 추가</span>
+        <span className="text-[12px] font-black text-ink">가구 추가</span>
         <button type="button" onClick={() => { setAddOpen(false); setPickerSlug(null); }} aria-label="닫기" className="grid h-6 w-6 place-items-center rounded-md bg-soft text-sm font-black leading-none text-slate-500 hover:bg-slate-100">×</button>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {/* 같은 상품이 여러 카테고리에 속할 수 있어(선반장=거실+수납) 중복 제거 — duplicate key 방지 */}
-        {[...new Set(catalogCategories.flatMap((cat) => cat.slugs))].map((slug) => {
-          // 상하부장 세트도 바로 추가 대신 규격(프리셋) 선택을 거친다
-          const presets = roomAddPresets[slug] ?? (slug === "kitchen_full_set" ? [] : undefined);
-          const active = pickerSlug === slug;
+      {/* ① 카테고리 탭 — 카테고리 색상으로 시인성 확보 */}
+      <div className="scrollbar-none mb-2 flex gap-1.5 overflow-x-auto pb-0.5">
+        {catalogCategories.map((cat) => {
+          const active = activeAddCat.id === cat.id;
           return (
             <button
-              key={slug}
+              key={cat.id}
               type="button"
-              title={`${productLabels[slug] ?? slug} ${presets ? "규격 선택" : "추가"}`}
-              onClick={() => (presets ? setPickerSlug(active ? null : slug) : addFurnitureToRoom(slug))}
-              className={`group flex w-[76px] shrink-0 flex-col items-center gap-1 rounded-xl border bg-white/80 p-1.5 transition hover:bg-white hover:shadow-sm active:scale-95 ${active ? "border-brand ring-2 ring-brand/30" : "border-slate-200/70 hover:border-brand"}`}
+              onClick={() => { setAddCat(cat.id); setPickerSlug(null); }}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-black transition active:scale-95 ${active ? "text-white shadow-sm" : ""}`}
+              style={active ? { background: cat.accent } : { background: cat.bg, color: cat.accent }}
             >
-              <span className="flex aspect-square w-full items-center justify-center rounded-lg bg-slate-50/70">
-                <ProductArt slug={slug} className="h-11 w-11" />
-              </span>
-              <span className="line-clamp-1 w-full text-center text-[10px] font-black text-slate-700">{productLabels[slug] ?? slug}</span>
+              {cat.title}
             </button>
           );
         })}
       </div>
-      {pickerSlug === "kitchen_full_set" ? (
-        <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 p-2">
-          <div className="mb-1.5 text-[11px] font-black text-brand">상하부장 세트 규격 — 누르면 바로 추가돼요</div>
+      {pickerSlug ? (
+        /* ②-b 규격 선택 — 타일 그리드 자리를 그대로 대체(겹겹이 쌓이지 않음) */
+        <div className="rounded-xl bg-white/70 p-2 ring-1 ring-slate-200/70">
+          <div className="mb-2 flex items-center gap-2">
+            <button type="button" onClick={() => setPickerSlug(null)} className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-200">← 상품 목록</button>
+            <span className="text-[12px] font-black text-ink">{productLabels[pickerSlug] ?? pickerSlug} 규격</span>
+            <span className="text-[10px] font-bold text-slate-400">누르면 바로 추가돼요</span>
+          </div>
           <div className="flex flex-wrap gap-1.5">
-            {KITCHEN_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                title={preset.description}
-                onClick={() => addKitchenSetToRoom(preset)}
-                className="rounded-lg bg-white px-3 py-1.5 text-left text-[12px] font-black text-slate-700 ring-1 ring-slate-200 transition hover:ring-brand active:scale-95"
-              >
-                {preset.label}
-                <span className="ml-1 text-[10px] font-bold text-slate-400">{preset.shape === "l_shape" ? "ㄱ자" : "일자"} · {preset.input.kitchen_modules_mm.length}칸</span>
-              </button>
-            ))}
+            {pickerSlug === "kitchen_full_set"
+              ? KITCHEN_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    title={preset.description}
+                    onClick={() => addKitchenSetToRoom(preset)}
+                    className="rounded-lg bg-white px-3 py-2 text-left text-[12px] font-black text-slate-700 ring-1 ring-slate-200 transition hover:ring-brand active:scale-95"
+                  >
+                    {preset.label}
+                    <span className="ml-1 text-[10px] font-bold text-slate-400">{preset.shape === "l_shape" ? "ㄱ자" : "일자"} · {preset.input.kitchen_modules_mm.length}칸</span>
+                  </button>
+                ))
+              : (roomAddPresets[pickerSlug] ?? []).map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => addFurnitureToRoom(pickerSlug, { width_mm: preset.width_mm, height_mm: preset.height_mm, depth_mm: preset.depth_mm })}
+                    className="rounded-lg bg-white px-3 py-2 text-[12px] font-black text-slate-700 ring-1 ring-slate-200 transition hover:ring-brand active:scale-95"
+                  >
+                    폭 {preset.label}mm
+                    <span className="ml-1 text-[10px] font-bold text-slate-400">H{preset.height_mm}·D{preset.depth_mm}</span>
+                  </button>
+                ))}
           </div>
         </div>
-      ) : pickerSlug && roomAddPresets[pickerSlug] ? (
-        <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 p-2">
-          <div className="mb-1.5 text-[11px] font-black text-brand">{productLabels[pickerSlug] ?? pickerSlug} 규격 — 누르면 바로 추가돼요</div>
-          <div className="flex flex-wrap gap-1.5">
-            {roomAddPresets[pickerSlug]!.map((p) => (
+      ) : (
+        /* ② 상품 타일 — 현재 카테고리의 상품만 크게 */
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {activeAddCat.slugs.map((slug) => {
+            const hasPresets = Boolean(roomAddPresets[slug]) || slug === "kitchen_full_set";
+            return (
               <button
-                key={p.label}
+                key={slug}
                 type="button"
-                onClick={() => addFurnitureToRoom(pickerSlug, { width_mm: p.width_mm, height_mm: p.height_mm, depth_mm: p.depth_mm })}
-                className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-black text-slate-700 ring-1 ring-slate-200 transition hover:ring-brand active:scale-95"
+                title={`${productLabels[slug] ?? slug} ${hasPresets ? "규격 선택" : "추가"}`}
+                onClick={() => (hasPresets ? setPickerSlug(slug) : addFurnitureToRoom(slug))}
+                className="group flex flex-col items-center gap-1 rounded-xl border border-slate-200/70 bg-white/85 p-2 transition hover:border-brand hover:bg-white hover:shadow-sm active:scale-95"
               >
-                폭 {p.label}mm
-                <span className="ml-1 text-[10px] font-bold text-slate-400">H{p.height_mm}·D{p.depth_mm}</span>
+                <span className="flex aspect-[4/3] w-full items-center justify-center rounded-lg" style={{ background: activeAddCat.bg }}>
+                  <ProductArt slug={slug} className="h-12 w-12 transition group-hover:scale-105" />
+                </span>
+                <span className="line-clamp-1 w-full text-center text-[11px] font-black text-slate-700">{productLabels[slug] ?? slug}</span>
+                <span className="text-[9px] font-bold text-slate-400">{hasPresets ? "규격 선택 →" : "바로 추가"}</span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      ) : null}
+      )}
     </>
   );
 

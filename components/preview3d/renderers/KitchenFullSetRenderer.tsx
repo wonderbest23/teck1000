@@ -985,6 +985,8 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
   const baseDepthM = dimensions.baseDepthMm / 1000;
   const wallHeightM = dimensions.wallHeightMm / 1000;
   const wallDepthM = dimensions.wallDepthMm / 1000;
+  // 상부장은 하부장보다 얕다 — 등면(뒷벽)을 하부장과 일치시켜 실제처럼 벽에 붙인다
+  const wallBackZ = -(baseDepthM - wallDepthM) / 2;
   const layout = normalizeKitchenModules(template, input.kitchen_modules_mm, input.kitchen_module_types);
   const modules = layout.modules;
   const baseModules = normalizeKitchenLayerWidths(modules, input.kitchen_base_modules_mm);
@@ -1247,6 +1249,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
         />
       ) : null;})}
       {hasToeKick && <ContinuousToeKick width={w} depth={baseDepthM} material={material} />}
+      <group position={[0, 0, wallBackZ]}>
       {modules.map((_, index) => {
         const moduleWidth = wallModules[index] ?? modules[index];
         return (hiddenWall.has(index) || (hoodReplacesCabinet && index === hoodModuleIndex)) ? null : (
@@ -1292,6 +1295,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
           onRestore={() => onRestoreModulePart?.(index, "wall")}
         />
       ) : null;})}
+      </group>
       {countertop.id !== "none" && (() => {
         // 싱크 자리에 실제 컷아웃을 낸 상판 — 구멍으로 싱크볼 내부가 그대로 보인다
         const sinkCut = sink.id !== "none"
@@ -1413,6 +1417,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
         />
       )}
       {hood.id !== "none" && (
+        <group position={[0, 0, wallBackZ]}>
         <HoodFixture
           x={hoodX}
           upperBottomY={upperBottomY}
@@ -1427,12 +1432,15 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
                 : undefined
           }
         />
+        </group>
       )}
       {microwave.id !== "none" && (
+        <group position={[0, 0, wallBackZ]}>
         <MicrowaveFixture
           x={microwaveX}
           onDragStart={onStartDragItem ? () => onStartDragItem("microwave_module_index", microwaveModuleIndex) : undefined}
         />
+        </group>
       )}
      </group>
     </group>
