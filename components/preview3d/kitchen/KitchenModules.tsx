@@ -8,7 +8,7 @@ import { KITCHEN_TOE_KICK_M } from "@/components/preview3d/constants";
 import { lighten } from "@/components/preview3d/materials";
 import { shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
 import type { SinkFixtureSpec } from "@/components/preview3d/kitchen/sinkFixtureSpec";
-import { Doors, DrainPlaceholder, Panel, SimpleCabinet, Trim } from "@/components/preview3d/primitives";
+import { CARCASS_FINISH, Doors, DrainPlaceholder, Panel, SimpleCabinet, Trim } from "@/components/preview3d/primitives";
 import type { DoorStyle, DoorSwing, MaterialColors, PreviewEditTarget, PreviewViewMode } from "@/components/preview3d/types";
 import type { KitchenModuleType } from "@/lib/kitchen";
 
@@ -710,18 +710,20 @@ export function KitchenWallModule({
 
   return (
     <group position={[x, y, 0]}>
-      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[width, height, t * 0.55]} position={[0, height / 2, -depth / 2 + t * 0.28]} color={lighten(material.color)} edge={material.edge} />
+      {/* 몸통 = 백색 멜라민 합판(carcass) — 문짝만 선택 소재 */}
+      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[width, height, t * 0.55]} position={[0, height / 2, -depth / 2 + t * 0.28]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
       {Array.from({ length: Math.max(0, shelfCount) }).map((_, index) => (
         <Panel
           key={`wall-shelf-${index}`}
           size={[innerWidth, t, depth * 0.9]}
           position={[0, t + ((height - t * 2) * (index + 1)) / (Math.max(0, shelfCount) + 1), 0.01]}
-          color={material.color}
-          edge={material.edge}
+          color={CARCASS_FINISH.color}
+          edge={CARCASS_FINISH.edge}
+          carcass
         />
       ))}
       {selected && selectedTarget === "module" && onShelfCountChange && (

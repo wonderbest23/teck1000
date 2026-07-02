@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Canvas } from "@react-three/fiber";
-import { ContactShadows, Environment, Lightformer, OrbitControls, PerspectiveCamera } from "@react-three/drei";
+import { OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
-import { FinishProvider, StudioRectLights } from "@/components/preview3d/primitives";
+import { FinishProvider } from "@/components/preview3d/primitives";
 import { CameraRig } from "@/components/preview3d/camera/CameraRig";
 import { getSceneFrame, getKitchenModuleFocusFrame } from "@/components/preview3d/camera/sceneFrame";
 import { KitchenSelectionPanel, PreviewOverlayControls } from "@/components/preview3d/controls/PreviewOverlayControls";
@@ -784,20 +784,14 @@ export function Preview3D({
 
       <PreviewErrorBoundary>
         <div ref={editor.sceneRef} className={`relative overflow-hidden touch-none bg-gradient-to-b from-slate-100 to-white ${isHero ? "h-[min(62vh,560px)] min-h-[340px] sm:min-h-[320px] rounded-2xl" : "mt-4 h-[min(52vh,420px)] min-h-[300px] rounded-3xl"}`}>
-          <Canvas shadows dpr={[1, 2]} gl={{ alpha: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }} onPointerMissed={handleClearSelection}>
+          <Canvas dpr={[1, 2]} gl={{ alpha: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 0.95 }} onPointerMissed={handleClearSelection}>
             <color attach="background" args={["#f8fafc"]} />
-            <ambientLight intensity={0.75} />
-            <directionalLight position={[2.5, 4, 3]} intensity={1.35} castShadow shadow-mapSize={[1024, 1024]} />
-            <StudioRectLights />
+            {/* 세로면(벽·장 앞면)은 전부 균일하게 — 방향광은 위에서만 살짝(상판 정도만 음영), 좌우 갈라짐 없음 */}
+            <ambientLight intensity={1.0} />
+            <hemisphereLight args={["#ffffff", "#f1f5f9", 0.55]} />
+            <directionalLight position={[0, 6, 0.5]} intensity={0.3} />
             <PerspectiveCamera makeDefault fov={isKitchenProduct ? 34 : 38} position={[1.8, 1.3, 2.1]} />
             <CameraRig frame={activeFrame} freeView={freeView || !isKitchenProduct} />
-            {/* UV 하이그로시 반사용 환경 */}
-            <Environment resolution={256} frames={1}>
-              <Lightformer intensity={3} form="rect" position={[0, 4, 7]} scale={[7, 7, 1]} />
-              <Lightformer intensity={2.4} form="rect" position={[-2.6, 3, 6]} scale={[0.8, 7, 1]} />
-              <Lightformer intensity={2.4} form="rect" position={[2.6, 3, 6]} scale={[0.8, 7, 1]} />
-              <Lightformer intensity={1.4} form="rect" position={[0, 7, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 6, 1]} />
-            </Environment>
             <FinishProvider material={selectedMaterial}>
             <Renderer
               input={input}
@@ -849,8 +843,6 @@ export function Preview3D({
               onEditEnd={() => editor.setEditing(false)}
             />
             </FinishProvider>
-            <ContactShadows position={[0, 0, 0]} opacity={0.18} scale={4.2} blur={2.8} far={2.4} />
-            <hemisphereLight args={["#ffffff", "#e2e8f0", 0.35]} />
             <OrbitControls
               enabled={controlsEnabled}
               enableRotate={allowRotate}

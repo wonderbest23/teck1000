@@ -1,22 +1,49 @@
 "use client";
 
 import { Edges, RoundedBox } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import type { Group } from "three";
 import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
-/** 면 광원(RectAreaLight) — 하이그로시 표면에 부드러운 직사각형 반사를 만들어 실사 느낌을 준다. */
-export function StudioRectLights() {
+/** 스튜디오 환경맵 — 하이그로시(UV) 도어에 창/면광 반사가 비쳐 실제 유광처럼 보이게 한다.
+ *  RoomEnvironment(내장, 네트워크 불필요) + environmentIntensity를 낮게 잡아
+ *  기존 균일 조명 밸런스는 유지하고 반사(스페큘러)만 얹는다. */
+export function StudioEnvironment({ intensity = 0.45 }: { intensity?: number }) {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const prevEnv = scene.environment;
+    const prevIntensity = scene.environmentIntensity;
+    scene.environment = envTex;
+    scene.environmentIntensity = intensity;
+    pmrem.dispose();
+    return () => {
+      scene.environment = prevEnv;
+      scene.environmentIntensity = prevIntensity;
+      envTex.dispose();
+    };
+  }, [gl, scene, intensity]);
+  return null;
+}
+
+/** 몸통(캐비닛 바디) 공통 마감 — 실제 싱크대처럼 몸통은 소재와 무관하게 백색 멜라민 합판 */
+export const CARCASS_FINISH = { color: "#f4f4f1", edge: "#d9dbd4" };
+
+/** 면 광원(RectAreaLight) — 하이그로시 표면에 부드러운 직사각형 반사를 만들어 실사 느낌을 준다.
+ *  scale로 전체 강도를 낮출 수 있다(무광 소재에서 과노출 방지). */
+export function StudioRectLights({ scale = 1 }: { scale?: number }) {
   useEffect(() => {
     RectAreaLightUniformsLib.init();
   }, []);
   return (
     <>
-      <rectAreaLight intensity={3.2} width={3.2} height={2} position={[0, 2.3, 2.4]} rotation={[-Math.PI / 7, 0, 0]} />
-      <rectAreaLight intensity={1.8} width={2} height={2.6} position={[-2.2, 1.9, 1]} rotation={[0, Math.PI / 4, 0]} />
-      <rectAreaLight intensity={1.8} width={2} height={2.6} position={[2.2, 1.9, 1]} rotation={[0, -Math.PI / 4, 0]} />
+      <rectAreaLight intensity={3.2 * scale} width={3.2} height={2} position={[0, 2.3, 2.4]} rotation={[-Math.PI / 7, 0, 0]} />
+      <rectAreaLight intensity={1.8 * scale} width={2} height={2.6} position={[-2.2, 1.9, 1]} rotation={[0, Math.PI / 4, 0]} />
+      <rectAreaLight intensity={1.8 * scale} width={2} height={2.6} position={[2.2, 1.9, 1]} rotation={[0, -Math.PI / 4, 0]} />
     </>
   );
 }
@@ -60,6 +87,7 @@ export function Panel({
   edge,
   transparent,
   opacity = 1,
+  carcass = false,
 }: {
   size: [number, number, number];
   position: [number, number, number];
@@ -67,18 +95,32 @@ export function Panel({
   edge: string;
   transparent?: boolean;
   opacity?: number;
+  /** 몸통(바디) 패널 — 선택 소재(광택/우드)와 무관하게 무광 멜라민 합판 질감으로 렌더 */
+  carcass?: boolean;
 }) {
   const { gloss, map } = useContext(FinishContext);
   // 베벨(모서리 둥글림) — 실제 가구 도어처럼 모서리에 살짝 라운드를 줘 빛이 부드럽게 꺾이게.
   const bevel = Math.min(0.006, Math.min(size[0], size[1], size[2]) * 0.28);
   return (
     <RoundedBox args={size} radius={bevel} smoothness={2} position={position} castShadow={!transparent} receiveShadow renderOrder={transparent ? 2 : 0}>
-      {map ? (
+      {carcass ? (
+        <meshStandardMaterial
+          color={color}
+          roughness={0.74}
+          metalness={0.02}
+          envMapIntensity={0.3}
+          transparent={transparent}
+          opacity={opacity}
+          depthWrite={!transparent}
+          depthTest
+        />
+      ) : map ? (
         <meshStandardMaterial
           map={map}
           color="#ffffff"
           roughness={0.5}
           metalness={0.02}
+          envMapIntensity={0.45}
           transparent={transparent}
           opacity={opacity}
           depthWrite={!transparent}
@@ -87,12 +129,12 @@ export function Panel({
       ) : gloss ? (
         <meshPhysicalMaterial
           color={color}
-          roughness={0.04}
+          roughness={0.06}
           metalness={0}
           clearcoat={1}
-          clearcoatRoughness={0.02}
+          clearcoatRoughness={0.04}
           reflectivity={1}
-          envMapIntensity={2.2}
+          envMapIntensity={1.5}
           transparent={transparent}
           opacity={opacity}
           depthWrite={!transparent}
@@ -103,6 +145,7 @@ export function Panel({
           color={color}
           roughness={0.62}
           metalness={0.03}
+          envMapIntensity={0.35}
           transparent={transparent}
           opacity={opacity}
           depthWrite={!transparent}
@@ -477,11 +520,12 @@ export function SimpleCabinet({
 
   return (
     <group position={[x, y, 0]}>
-      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[width, height, t * 0.6]} position={[0, height / 2, -depth / 2 + t * 0.3]} color={lighten(material.color)} edge={material.edge} />
+      {/* 몸통(측판·상하판·뒷판·선반) = 백색 멜라민 합판 — 문짝(선택 소재)과 실제처럼 구분 */}
+      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[width, height, t * 0.6]} position={[0, height / 2, -depth / 2 + t * 0.3]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
       {Array.from({ length: shelfCount }).map((_, index) => {
         const shelfY = t + ((height - t * 2) * (index + 1)) / (shelfCount + 1);
         return (
@@ -489,8 +533,9 @@ export function SimpleCabinet({
             <Panel
               size={[innerWidth, t, depth * 0.94]}
               position={[0, shelfY, 0.01]}
-              color={showInterior ? lighten(material.color) : material.color}
-              edge={material.edge}
+              color={CARCASS_FINISH.color}
+              edge={CARCASS_FINISH.edge}
+              carcass
               transparent={false}
               opacity={1}
             />

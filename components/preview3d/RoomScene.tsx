@@ -1,17 +1,21 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, Environment, Html, Lightformer, OrbitControls, PerspectiveCamera } from "@react-three/drei";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ContactShadows, Html, OrbitControls, PerspectiveCamera } from "@react-three/drei";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import * as THREE from "three";
-import { FinishProvider, PreviewRoom, StudioRectLights } from "@/components/preview3d/primitives";
+import { FinishProvider, PreviewRoom } from "@/components/preview3d/primitives";
 import { getMaterialPreset, materialPresets } from "@/components/preview3d/materials";
 import { getPreviewRenderer } from "@/components/preview3d/renderers/rendererRegistry";
 import { CameraRig } from "@/components/preview3d/camera/CameraRig";
 import { getFootprint, type Footprint, type Placement, type RoomItem } from "@/components/preview3d/roomLayout";
 import { useKitchenEditor } from "@/components/preview3d/controls/useKitchenEditor";
+import { SceneSizePanel, type PanelActions, type PanelNotice, type SizeGroup } from "@/components/preview3d/controls/SceneSizePanel";
+import { materials as materialCatalog } from "@/lib/data";
 import type { DoorSwing, KitchenModulePart, PreviewEditTarget } from "@/components/preview3d/types";
 import { KITCHEN_STANDARDS } from "@/lib/platformConfig";
+import { getKitchenSetDimensions, KITCHEN_DIMENSION_LIMITS } from "@/lib/kitchen";
 import type { KitchenModuleType } from "@/lib/kitchen";
 import type { FurnitureInput } from "@/lib/types";
 
@@ -30,6 +34,12 @@ type KitchenInteractive = {
   onDoorSwingChange?: (swing: DoorSwing) => void;
   onHandleChange?: (hasHandle: boolean) => void;
   onRestoreModulePart?: (index: number, part: KitchenModulePart) => void;
+  // ㄱ자(L형) 측면 다리 칸 편집
+  selectedSideIndex?: number | null;
+  onSelectSideModule?: (index: number) => void;
+  onAddSideModule?: () => void;
+  onRemoveSideModule?: () => void;
+  onSideModuleWidthChange?: (widthMm: number) => void;
 };
 
 const clampW = (mm: number) => Math.min(3000, Math.max(150, Math.round(mm)));
@@ -96,6 +106,8 @@ function DraggableItem({
   kitchen,
   highlight,
   expert,
+  editable = true,
+  showName = true,
   showDimensions,
   doorsOpen,
 }: {
@@ -106,6 +118,10 @@ function DraggableItem({
   kitchen?: KitchenInteractive;
   highlight?: boolean;
   expert?: boolean;
+  /** 수정 모드 여부 — false(보기 모드)면 선택/핸들/배지 등 편집 UI 전부 숨김 */
+  editable?: boolean;
+  /** 이름표 표시 — 가구가 1개뿐이면 불필요해 숨김(툴바 가림 방지) */
+  showName?: boolean;
   showDimensions?: boolean;
   doorsOpen?: boolean;
   onSelect: (id: string) => void;
@@ -231,6 +247,11 @@ function DraggableItem({
         onDoorSwingChange={kitchen?.onDoorSwingChange}
         onHandleChange={kitchen?.onHandleChange}
         onRestoreModulePart={kitchen?.onRestoreModulePart}
+        selectedSideIndex={kitchen?.selectedSideIndex ?? null}
+        onSelectSideModule={kitchen?.onSelectSideModule}
+        onAddSideModule={kitchen?.onAddSideModule}
+        onRemoveSideModule={kitchen?.onRemoveSideModule}
+        onSideModuleWidthChange={kitchen?.onSideModuleWidthChange}
         onEditStart={() => {}}
         onEditEnd={() => {}}
         interactive={Boolean(kitchen)}
@@ -246,20 +267,20 @@ function DraggableItem({
           </Html>
         </>
       )}
-      {/* 이름표 — 어떤 가구인지 식별(선택 안 됐을 때만, 비클릭) */}
-      {!selected && !highlight && (
+      {/* 이름표 — 어떤 가구인지 식별(수정 모드 + 선택 안 됐을 때만, 비클릭). 보기 모드는 깨끗하게 */}
+      {editable && showName && !selected && !highlight && (
         <Html position={[0, topY + 0.1, 0]} center distanceFactor={7} zIndexRange={[20, 10]}>
           <div style={{ pointerEvents: "none" }} className="whitespace-nowrap rounded bg-slate-900/75 px-1.5 py-0.5 text-[9px] font-black text-white">{item.name}</div>
         </Html>
       )}
       {/* 클릭 히트박스 — 선택만 (드래그 X). 주방 칸 클릭 편집 중에는 칸 클릭을 가리지 않도록 끔 */}
-      {!kitchen && (
+      {editable && !kitchen && (
         <mesh position={[0, centerY, 0]} onPointerDown={selectOnly}>
           <boxGeometry args={[footprint.widthM, boxHeight, footprint.depthM]} />
           <meshBasicMaterial transparent opacity={selected ? 0.06 : 0} depthWrite={false} color="#06b6d4" />
         </mesh>
       )}
-      {selected && (
+      {editable && selected && (
         <>
           <mesh position={[0, centerY, 0]}>
             <boxGeometry args={[footprint.widthM * 1.02, boxHeight * 1.02, footprint.depthM * 1.04]} />
@@ -307,11 +328,17 @@ export function RoomScene({
   selectedId,
   highlightId,
   expert,
+  editable = true,
   onSelect,
   onMove,
   onMoveEnd,
   onResize,
   onCommitItem,
+  onRotateItem,
+  onDuplicateItem,
+  onRemoveItem,
+  selectedNotice,
+  mobilePanelHost,
   showDimensions,
   doorsOpen,
   guides,
@@ -322,11 +349,21 @@ export function RoomScene({
   selectedId: string | null;
   highlightId?: string | null;
   expert?: boolean;
+  /** 수정 모드 여부 — false(보기 모드)면 선택/편집 UI 없이 감상만 */
+  editable?: boolean;
   onSelect: (id: string | null) => void;
   onMove: (id: string, x: number, z: number) => void;
   onMoveEnd: () => void;
   onResize: (id: string, patch: Partial<FurnitureInput>, center?: { x: number; z: number }, dir?: { x: number; z: number }) => void;
   onCommitItem: (id: string, input: FurnitureInput) => void;
+  /** 회전·복제·삭제 — 우측 사이즈 패널의 액션 줄로 노출 */
+  onRotateItem?: (id: string) => void;
+  onDuplicateItem?: (id: string) => void;
+  onRemoveItem?: (id: string) => void;
+  /** 선택 가구의 주문 불가/주의 사유 — 패널 상단에 표시 */
+  selectedNotice?: PanelNotice | null;
+  /** 모바일용 패널 호스트 — 있으면 사이즈 패널을 이 엘리먼트(섹션 아래)에도 inline으로 포털 렌더 */
+  mobilePanelHost?: HTMLElement | null;
   showDimensions?: boolean;
   doorsOpen?: boolean;
   guides: { axis: "x" | "z"; value: number }[];
@@ -339,6 +376,7 @@ export function RoomScene({
   const kitchenInputForEditor = selectedKitchen?.input ?? items[0]?.input;
   const [partSel, setPartSel] = useState<KitchenModulePart>("base");
   const [applyAll, setApplyAll] = useState(false);
+  const [sideSel, setSideSel] = useState<number | null>(null); // ㄱ자 측면 다리 칸 선택(메인 칸 선택과 분리)
   const kEditor = useKitchenEditor(kitchenInputForEditor, (next) => {
     if (selectedKitchen) onCommitItem(selectedKitchen.id, next);
   });
@@ -349,6 +387,7 @@ export function RoomScene({
       kEditor.clearSelectedModule();
       setPartSel("base");
       setApplyAll(false);
+      setSideSel(null);
       prevSelRef.current = selectedId;
     }
   }, [selectedId, kEditor]);
@@ -359,13 +398,17 @@ export function RoomScene({
   const moduleCount = kEditor.kitchenLayout?.modules.length ?? 1;
   const commitKi = (next: FurnitureInput) => { if (selectedKitchen) onCommitItem(selectedKitchen.id, next); };
 
-  // 주방(상하부장)은 간편 모드에서도 칸을 클릭해 편집할 수 있어야 한다(유일한 편집 수단)
-  const kitchenInteractive: KitchenInteractive | undefined = selectedKitchen
+  // ㄱ자(L형) 여부 — 측면 다리 편집은 L형 주방에서만
+  const isLShape = Boolean(selectedKitchen && ki?.kitchen_layout_shape === "l_shape" && (ki?.kitchen_side_modules_mm?.length ?? 0) > 0);
+
+  // 주방(상하부장)은 간편 모드에서도 칸을 클릭해 편집할 수 있어야 한다(유일한 편집 수단). 보기 모드에선 끔.
+  const kitchenInteractive: KitchenInteractive | undefined = editable && selectedKitchen
     ? {
         selectedModuleIndex: moduleIdx,
         selectedModulePart: partSel,
         onSelectModule: (index, part) => {
           if (kEditor.consumeLayerClickSuppression()) return;
+          setSideSel(null);
           if (kEditor.selectedModuleIndex === index && partSel === part) {
             kEditor.clearSelectedModule();
             return;
@@ -390,6 +433,49 @@ export function RoomScene({
           commitKi({ ...ki, [key]: Array.from(set).sort((a, b) => a - b) });
         },
         onRestoreModulePart: (index, part) => kEditor.restoreModulePart(index, part),
+        // ㄱ자 측면 다리 칸 — 선택/폭/추가/삭제 (메인 칸 선택과 상호 배타)
+        selectedSideIndex: isLShape ? sideSel : null,
+        onSelectSideModule: isLShape
+          ? (index) => {
+              kEditor.clearSelectedModule();
+              setSideSel((current) => (current === index ? null : index));
+            }
+          : undefined,
+        onSideModuleWidthChange: isLShape
+          ? (widthMm) => {
+              if (sideSel === null || !ki) return;
+              const next = [...(ki.kitchen_side_modules_mm ?? [])];
+              if (sideSel >= next.length) return;
+              next[sideSel] = Math.max(150, Math.min(1000, Math.round(widthMm)));
+              commitKi({ ...ki, kitchen_side_modules_mm: next });
+            }
+          : undefined,
+        onAddSideModule: isLShape
+          ? () => {
+              if (!ki) return;
+              const mods = [...(ki.kitchen_side_modules_mm ?? [])];
+              const types = [...(ki.kitchen_side_module_types ?? [])];
+              if (mods.length >= 5) return;
+              const refIndex = sideSel ?? mods.length - 1;
+              const insertIndex = Math.min(refIndex + 1, mods.length);
+              mods.splice(insertIndex, 0, mods[refIndex] ?? 600);
+              types.splice(insertIndex, 0, "door");
+              commitKi({ ...ki, kitchen_side_modules_mm: mods, kitchen_side_module_types: types });
+              setSideSel(null);
+            }
+          : undefined,
+        onRemoveSideModule: isLShape
+          ? () => {
+              if (sideSel === null || !ki) return;
+              const mods = [...(ki.kitchen_side_modules_mm ?? [])];
+              const types = [...(ki.kitchen_side_module_types ?? [])];
+              if (mods.length <= 1) return;
+              mods.splice(sideSel, 1);
+              types.splice(sideSel, 1);
+              commitKi({ ...ki, kitchen_side_modules_mm: mods, kitchen_side_module_types: types });
+              setSideSel(null);
+            }
+          : undefined,
       }
     : undefined;
 
@@ -443,22 +529,148 @@ export function RoomScene({
     setFrame(makeFrame());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length, selectedId]);
+  // 이동/회전으로 배치가 바뀌면(드래그가 멈춘 뒤 잠시 후) 카메라가 따라잡는다 — 벽으로 옮긴 가구가 화면 밖에 남지 않게.
+  // 드래그 중에는 타이머가 계속 리셋되어 카메라가 흔들리지 않는다.
+  const placementsSig = useMemo(
+    () => items.map((it) => { const p = placements[it.id]; return p ? `${p.x.toFixed(2)},${p.z.toFixed(2)},${p.rotY.toFixed(2)}` : "-"; }).join("|"),
+    [items, placements],
+  );
+  const skipFirstSigRef = useRef(true);
+  useEffect(() => {
+    if (skipFirstSigRef.current) {
+      skipFirstSigRef.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => setFrame(makeFrame()), 350);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placementsSig]);
+
+  // ── 우측 고정 사이즈 조절 패널 — 선택 대상에 맞는 치수 rows를 데이터로 구성 ──
+  const selectedItem = items.find((it) => it.id === selectedId) ?? null;
+  const panelActions: PanelActions | undefined = selectedId
+    ? {
+        onRotate: onRotateItem ? () => onRotateItem(selectedId) : undefined,
+        onDuplicate: onDuplicateItem ? () => onDuplicateItem(selectedId) : undefined,
+        onRemove: onRemoveItem ? () => onRemoveItem(selectedId) : undefined,
+      }
+    : undefined;
+  const panelMaterials = (input: FurnitureInput, commit: (next: FurnitureInput) => void) => ({
+    list: materialCatalog.map((m) => ({ name: m.name, color: m.color, tone: m.tone })),
+    current: input.material,
+    onSelect: (name: string, color: string) => commit({ ...input, material: name, color }),
+  });
+  let renderSizePanel: ((variant: "overlay" | "inline") => ReactNode) | null = null;
+  if (editable && selectedKitchen && ki) {
+    const dims = getKitchenSetDimensions(ki);
+    const totalWidthMm = (ki.kitchen_base_modules_mm ?? ki.kitchen_modules_mm ?? []).reduce((sum, w) => sum + w, 0);
+    const groups: SizeGroup[] = [];
+    if (sideSel !== null && isLShape) {
+      const sideMods = ki.kitchen_side_modules_mm ?? [];
+      const sideWidthMm = Math.round(sideMods[sideSel] ?? 600);
+      groups.push({
+        heading: `측면 ${sideSel + 1}번 칸 폭`,
+        rows: [{
+          key: "side-width",
+          label: "폭",
+          value: sideWidthMm,
+          min: 150,
+          max: 1000,
+          step: 50,
+          onChange: (mm) => {
+            const next = [...sideMods];
+            next[sideSel] = Math.max(150, Math.min(1000, Math.round(mm)));
+            commitKi({ ...ki, kitchen_side_modules_mm: next });
+          },
+        }],
+      });
+    } else if (moduleIdx !== null) {
+      const layerMods = partSel === "wall" ? ki.kitchen_wall_modules_mm : ki.kitchen_base_modules_mm;
+      const moduleWidthMm = Math.round(layerMods?.[moduleIdx] ?? ki.kitchen_modules_mm?.[moduleIdx] ?? KITCHEN_STANDARDS.defaultModuleWidthMm);
+      groups.push({
+        heading: `${moduleIdx + 1}번 칸 폭`,
+        rows: [{ key: "module-width", label: "폭", value: moduleWidthMm, min: 150, max: 1000, step: 50, onChange: (mm) => kEditor.updateSelectedModuleWidth(mm, partSel) }],
+      });
+    }
+    groups.push({
+      heading: "하부장 전체",
+      rows: [
+        { key: "base-height", label: "높이", value: dims.baseHeightMm, min: KITCHEN_DIMENSION_LIMITS.baseHeight.min, max: KITCHEN_DIMENSION_LIMITS.baseHeight.max, step: KITCHEN_DIMENSION_LIMITS.baseHeight.step, onChange: (mm) => commitKi({ ...ki, height_mm: mm, kitchen_base_height_mm: mm }) },
+        { key: "base-depth", label: "깊이", value: dims.baseDepthMm, min: KITCHEN_DIMENSION_LIMITS.baseDepth.min, max: KITCHEN_DIMENSION_LIMITS.baseDepth.max, step: KITCHEN_DIMENSION_LIMITS.baseDepth.step, onChange: (mm) => commitKi({ ...ki, kitchen_base_depth_mm: mm }) },
+      ],
+    });
+    groups.push({
+      heading: "상부장 전체",
+      rows: [
+        { key: "wall-height", label: "높이", value: dims.wallHeightMm, min: KITCHEN_DIMENSION_LIMITS.wallHeight.min, max: KITCHEN_DIMENSION_LIMITS.wallHeight.max, step: KITCHEN_DIMENSION_LIMITS.wallHeight.step, onChange: (mm) => commitKi({ ...ki, kitchen_wall_height_mm: mm }) },
+        { key: "wall-depth", label: "깊이", value: dims.wallDepthMm, min: KITCHEN_DIMENSION_LIMITS.wallDepth.min, max: KITCHEN_DIMENSION_LIMITS.wallDepth.max, step: KITCHEN_DIMENSION_LIMITS.wallDepth.step, onChange: (mm) => commitKi({ ...ki, kitchen_wall_depth_mm: mm }) },
+      ],
+    });
+    renderSizePanel = (variant) => (
+      <SceneSizePanel
+        variant={variant}
+        title={
+          sideSel !== null && isLShape
+            ? `측면 ${sideSel + 1}번 칸`
+            : moduleIdx !== null
+              ? `${moduleIdx + 1}번 ${partSel === "wall" ? "상부장" : "하부장"}`
+              : selectedKitchen.name
+        }
+        subtitle={`전체 길이 ${totalWidthMm}mm`}
+        groups={groups}
+        materials={panelMaterials(ki, commitKi)}
+        actions={moduleIdx === null && sideSel === null ? panelActions : undefined}
+        notice={selectedNotice}
+        onClose={() => {
+          if (sideSel !== null) setSideSel(null);
+          else if (moduleIdx !== null) kEditor.clearSelectedModule();
+          else onSelect(null);
+        }}
+      >
+        {moduleIdx !== null && (
+          <div className="flex gap-1">
+            {([["base", "하부장"], ["wall", "상부장"]] as const).map(([part, label]) => (
+              <button
+                key={part}
+                type="button"
+                onClick={() => setPartSel(part)}
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-black transition ${partSel === part ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </SceneSizePanel>
+    );
+  } else if (editable && selectedItem) {
+    renderSizePanel = (variant) => (
+      <SceneSizePanel
+        variant={variant}
+        title={selectedItem.name}
+        groups={[{
+          rows: [
+            { key: "width", label: "가로", value: selectedItem.input.width_mm, min: 150, max: 3000, step: 50, onChange: (mm) => onResize(selectedItem.id, { width_mm: mm }) },
+            { key: "height", label: "높이", value: selectedItem.input.height_mm, min: 120, max: 2800, step: 50, onChange: (mm) => onResize(selectedItem.id, { height_mm: mm }) },
+            { key: "depth", label: "깊이", value: selectedItem.input.depth_mm, min: 150, max: 3000, step: 50, onChange: (mm) => onResize(selectedItem.id, { depth_mm: mm }) },
+          ],
+        }]}
+        materials={panelMaterials(selectedItem.input, (next) => onCommitItem(selectedItem.id, next))}
+        actions={panelActions}
+        notice={selectedNotice}
+        onClose={() => onSelect(null)}
+      />
+    );
+  }
 
   return (
     <div className="relative h-full min-h-[340px] w-full overflow-hidden rounded-2xl bg-gradient-to-b from-slate-100 to-white">
-      <Canvas shadows dpr={[1, 2]} gl={{ alpha: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }} onPointerMissed={() => onSelect(null)}>
+      <Canvas dpr={[1, 2]} gl={{ alpha: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 0.95 }} onPointerMissed={() => onSelect(null)}>
         <color attach="background" args={["#f8fafc"]} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[3, 5, 3]} intensity={1.7} castShadow shadow-mapSize={[1024, 1024]} />
-        <hemisphereLight args={["#ffffff", "#e2e8f0", 0.3]} />
-        <StudioRectLights />
-        {/* 고광택(UV하이그로시) 반사용 환경 — 정면에 밝은 띠를 둬 광택 표면에 선명한 반사 줄무늬가 생기게 */}
-        <Environment resolution={256} frames={1}>
-          <Lightformer intensity={3} form="rect" position={[0, 4, 7]} scale={[7, 7, 1]} />
-          <Lightformer intensity={2.4} form="rect" position={[-2.6, 3, 6]} scale={[0.8, 7, 1]} />
-          <Lightformer intensity={2.4} form="rect" position={[2.6, 3, 6]} scale={[0.8, 7, 1]} />
-          <Lightformer intensity={1.4} form="rect" position={[0, 7, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 6, 1]} />
-        </Environment>
+        {/* 벽·바닥이 고르게 — 면광원/줄무늬 환경광/그림자 제거로 좌우 갈라짐 없음 */}
+        <ambientLight intensity={1.0} />
+        <hemisphereLight args={["#ffffff", "#f1f5f9", 0.55]} />
+        <directionalLight position={[0, 6, 0.5]} intensity={0.3} />
         <PerspectiveCamera makeDefault fov={38} position={[2.5, 2, 3]} />
         <CameraRig frame={frame} freeView />
         <PreviewRoom extents={floor} floorY={0} topY={floor.topY} ceilingY={ceilingY} />
@@ -500,6 +712,8 @@ export function RoomScene({
             kitchen={selectedKitchen?.id === it.id ? kitchenInteractive : undefined}
             highlight={highlightId === it.id}
             expert={expert}
+            editable={editable}
+            showName={items.length > 1}
             showDimensions={showDimensions}
             doorsOpen={doorsOpen}
           />
@@ -508,10 +722,14 @@ export function RoomScene({
         <OrbitControls makeDefault enablePan={false} target={frame.target} minDistance={frame.minDistance} maxDistance={frame.maxDistance} />
       </Canvas>
 
-      {/* 칸 편집은 3D 미리보기 안의 인라인 컨트롤로 통일 — 셀(칸)을 누르면 좌우 ＋칸추가 · 단수 · 삭제 · 상부장 추가가 그 칸에 바로 뜸 (하단 도크 제거) */}
-      {selectedKitchen && moduleIdx === null && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-30 flex justify-center">
-          <span className="rounded-full bg-slate-900/80 px-3 py-1 text-[11px] font-black text-white shadow">칸(문짝)을 누르면 옆에 ＋ 추가·삭제 버튼이 떠요</span>
+      {/* 사이즈 조절 패널 — 데스크톱: 캔버스 우측 오버레이 / 모바일: 섹션 아래 inline(미리보기를 가리지 않음) */}
+      {renderSizePanel?.("overlay")}
+      {mobilePanelHost && renderSizePanel && createPortal(<div className="sm:hidden">{renderSizePanel("inline")}</div>, mobilePanelHost)}
+
+      {/* 칸 편집 안내 — 3D 인라인 컨트롤(＋추가·삭제)과 우측 패널을 함께 안내 */}
+      {editable && selectedKitchen && moduleIdx === null && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-16 z-30 flex justify-center">
+          <span className="rounded-full bg-slate-900/80 px-3 py-1 text-[11px] font-black text-white shadow">칸(문짝)을 누르면 크기 조절 패널이 열려요</span>
         </div>
       )}
     </div>

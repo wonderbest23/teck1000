@@ -11,7 +11,7 @@ import type { RoomAction, RoomStateSummary } from "@/lib/roomCommands";
 import { archiveDraft, readDraft, writeDraft } from "@/lib/quoteHistory";
 import { defaultInput, getProduct, materials } from "@/lib/data";
 import { formatMoney } from "@/lib/format";
-import { clampModuleIndex, cooktopOptions, countertopOptions, deriveModuleTypeCounts, faucetOptions, getKitchenSetDimensions, getKitchenTemplate, hoodOptions, KITCHEN_DIMENSION_LIMITS, kitchenTemplates, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, snapKitchenDimensionMm, toeKickOptions } from "@/lib/kitchen";
+import { clampModuleIndex, cooktopOptions, countertopOptions, deriveModuleTypeCounts, faucetOptions, getKitchenSetDimensions, getKitchenTemplate, hoodOptions, kitchenTemplates, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, toeKickOptions } from "@/lib/kitchen";
 import { MAX_WARDROBE_MODULE_COUNT, MAX_WARDROBE_MODULE_WIDTH_MM, MIN_WARDROBE_MODULE_COUNT, MIN_WARDROBE_MODULE_WIDTH_MM, alignWardrobeCounts, getDefaultWardrobeModules, normalizeWardrobeModules, wardrobeModuleTypeLabels, type WardrobeModuleType } from "@/lib/wardrobe";
 import { calculateQuote } from "@/lib/quote";
 import { countOptionCases, getDoorCountOptions, getSafeDoorCount, productRules } from "@/lib/rules";
@@ -19,13 +19,15 @@ import type { FurnitureInput, ProductType } from "@/lib/types";
 import { ENTRANCE_STANDARDS, KITCHEN_STANDARDS, WARDROBE_STANDARDS, snapKitchenModuleWidthMm } from "@/lib/platformConfig";
 import { PreOrderCheckPanel } from "@/components/PreOrderCheckPanel";
 import { EditorShell } from "@/components/editor/EditorShell";
+import { RedoIcon, UndoIcon } from "@/components/editor/HistoryControls";
 import { ModuleStripPlan } from "@/components/editor/ModuleStripPlan";
 import { ModuleListEditor } from "@/components/editor/ModuleListEditor";
 import { KitchenDrawingView } from "@/components/admin/KitchenDrawingView";
+import { KitchenPresetPicker } from "@/components/preview3d/controls/KitchenPresetPicker";
 import { getEditorCategories } from "@/lib/productEditorSchema";
 import { autoArrange, getFootprint, ROOM_BACK, type Placement, type RoomItem } from "@/components/preview3d/roomLayout";
 import { useInputHistory } from "@/lib/hooks/useInputHistory";
-import { validateOrderInput, ORDER_VERDICT_CTA } from "@/lib/order-validation";
+import { validateOrderInput, ORDER_VERDICT_CTA, ORDER_VERDICT_LABELS } from "@/lib/order-validation";
 
 const RoomScene = dynamic(() => import("@/components/preview3d/RoomScene").then((mod) => mod.RoomScene), {
   ssr: false,
@@ -69,6 +71,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   // 자동 저장/복원 — 수정할 때마다 localStorage에 저장. 단 '?fresh=1'(새로 시작)이면 기존 작업본을 보관하고 새로 시작.
   const isFresh = searchParams.get("fresh") === "1";
   const [hydrated, setHydrated] = useState(false);
+  // Phase 1: 주방 세트 신규 생성 시 "형태→길이" 프리셋 픽커를 먼저 보여준다(빈 캔버스 제거)
+  const [showKitchenPreset, setShowKitchenPreset] = useState(productType === "kitchen_full_set");
   useEffect(() => {
     if (isFresh) {
       // 기존 작업본을 '최근 저장 내역'으로 보관 후 슬롯 비움 + 장바구니(방에 떠있던 가구)도 비움 → 완전히 깨끗한 새 시작
@@ -84,7 +88,10 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       return;
     }
     const saved = readDraft(productType);
-    if (saved) resetInput(normalizeInput(saved));
+    if (saved) {
+      resetInput(normalizeInput(saved));
+      setShowKitchenPreset(false); // 저장된 작업본이 있으면 이미 구성된 상태 → 픽커 생략
+    }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -126,7 +133,10 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const [roomSelected, setRoomSelected] = useState<string | null>(null);
   const [roomGuides, setRoomGuides] = useState<{ axis: "x" | "z"; value: number }[]>([]);
   const [justAddedId, setJustAddedId] = useState<string | null>(null); // 방금 추가한 가구 — 파란 테두리로 안내
-  const [controlsOpen, setControlsOpen] = useState(true); // 하단 컨트롤 카드 접기/펴기(모바일에서 미리보기 가림 방지)
+  const [canvasMode, setCanvasMode] = useState<"view" | "edit">("edit"); // 보기/수정 모드 — 보기 모드는 편집 UI 없이 감상만
+  const [addOpen, setAddOpen] = useState(false); // 캔버스 하단 '＋ 가구 추가' 시트
+  // 모바일: 사이즈 패널을 미리보기 위가 아니라 섹션 아래(belowCanvas)에 포털로 렌더 — 화면을 가리지 않게
+  const [mobilePanelHost, setMobilePanelHost] = useState<HTMLDivElement | null>(null);
   const [pickerSlug, setPickerSlug] = useState<ProductType | null>(null); // 규격 선택 단계(제품 누르면 사이즈 칩 표시)
   const [chatOpen, setChatOpen] = useState(false); // AI 명령 채팅 패널
   // 상품추가 패널 — 같은 주문(장바구니)에 담긴 항목 목록
@@ -351,7 +361,46 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     return { x, z, guides };
   }
 
+  // ── 현실 제약: 벽부착 가구(싱크대·붙박이장 등)는 벽에서 떨어질 수 없다 ──
+  // 이동하면 가장 가까운 벽에 등을 붙이고, 옆벽으로 끌고 가면 자동으로 그 벽을 향해 회전한다.
+  const WALL_BOUND_TYPES = new Set<ProductType>([
+    "kitchen_full_set",
+    "kitchen_base_cabinet",
+    "kitchen_wall_cabinet",
+    "built_in_wardrobe",
+    "shoe_cabinet",
+    "gap_cabinet",
+    "custom_shelf",
+  ]); // kitchen_island(아일랜드)만 방 중앙 허용
+  function isWallBound(id: string) {
+    const it = roomItems.find((i) => i.id === id);
+    return it ? WALL_BOUND_TYPES.has(it.input.productType) : false;
+  }
+  /** 원하는 지점에서 가장 가까운 벽으로 투영 — 등을 벽에 붙이고(rotY 고정) 벽을 따라서만 미끄러진다 */
+  function projectToWall(id: string, x: number, z: number) {
+    const f = roomFootprints[id];
+    const hw = f.widthM / 2;
+    const hd = f.depthM / 2;
+    const cl = (v: number, lo: number, hi: number) => (hi < lo ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+    const walls = [
+      { wall: "back" as const, d: Math.abs(z - roomFloor.backZ), rotY: 0, x: cl(x, roomFloor.leftX + hw, roomFloor.rightX - hw), z: roomFloor.backZ + hd },
+      { wall: "front" as const, d: Math.abs(roomFloor.frontZ - z), rotY: Math.PI, x: cl(x, roomFloor.leftX + hw, roomFloor.rightX - hw), z: roomFloor.frontZ - hd },
+      { wall: "left" as const, d: Math.abs(x - roomFloor.leftX), rotY: Math.PI / 2, x: roomFloor.leftX + hd, z: cl(z, roomFloor.backZ + hw, roomFloor.frontZ - hw) },
+      { wall: "right" as const, d: Math.abs(roomFloor.rightX - x), rotY: -Math.PI / 2, x: roomFloor.rightX - hd, z: cl(z, roomFloor.backZ + hw, roomFloor.frontZ - hw) },
+    ];
+    return walls.reduce((best, w) => (w.d < best.d ? w : best));
+  }
   function moveRoomItem(id: string, x: number, z: number) {
+    if (isWallBound(id)) {
+      const w = projectToWall(id, x, z);
+      const r = snapAndResolve(id, w.x, w.z, w.rotY, roomPlacements);
+      // 충돌/스냅 보정 후에도 벽 수직 방향은 다시 벽에 고정(벽에서 떨어지지 않게)
+      const fx = w.wall === "left" || w.wall === "right" ? w.x : r.x;
+      const fz = w.wall === "back" || w.wall === "front" ? w.z : r.z;
+      setRoomGuides(r.guides);
+      setRoomPlacements((current) => ({ ...current, [id]: { x: fx, z: fz, rotY: w.rotY } }));
+      return;
+    }
     const rotY = roomPlacements[id]?.rotY ?? 0;
     const r = snapAndResolve(id, x, z, rotY, roomPlacements);
     setRoomGuides(r.guides);
@@ -366,6 +415,26 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     setRoomSelected(null);
   }
   function rotateRoomItem(id: string) {
+    // 벽부착 가구의 회전 = 다음 벽으로 이동(뒤→오른쪽→앞→왼쪽 순환). 벽에서 떨어진 회전은 불가.
+    if (isWallBound(id)) {
+      setRoomPlacements((current) => {
+        const cur = current[id] ?? { x: 0, z: 0, rotY: 0 };
+        const wallOrder = ["back", "right", "front", "left"] as const;
+        const here = projectToWall(id, cur.x, cur.z);
+        const next = wallOrder[(wallOrder.indexOf(here.wall) + 1) % wallOrder.length];
+        const f = roomFootprints[id];
+        const hw = f.widthM / 2;
+        const hd = f.depthM / 2;
+        const cl = (v: number, lo: number, hi: number) => (hi < lo ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+        const target =
+          next === "back" ? { rotY: 0, x: cl(cur.x, roomFloor.leftX + hw, roomFloor.rightX - hw), z: roomFloor.backZ + hd }
+          : next === "front" ? { rotY: Math.PI, x: cl(cur.x, roomFloor.leftX + hw, roomFloor.rightX - hw), z: roomFloor.frontZ - hd }
+          : next === "left" ? { rotY: Math.PI / 2, x: roomFloor.leftX + hd, z: cl(cur.z, roomFloor.backZ + hw, roomFloor.frontZ - hw) }
+          : { rotY: -Math.PI / 2, x: roomFloor.rightX - hd, z: cl(cur.z, roomFloor.backZ + hw, roomFloor.frontZ - hw) };
+        return { ...current, [id]: target };
+      });
+      return;
+    }
     setRoomPlacements((current) => {
       const cur = current[id] ?? { x: 0, z: 0, rotY: 0 };
       const rotY = cur.rotY + Math.PI / 2;
@@ -425,8 +494,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     if (roomSelected) commitRoomItemById(roomSelected, nextInput);
   }
 
-  // 선택 가구의 사이즈가 권장 범위(productRules)를 벗어났는지 — 화면 경고 + 권장값/무시 선택
-  const [sizeWarnDismissed, setSizeWarnDismissed] = useState<string | null>(null);
+  // 선택 가구의 사이즈가 권장 범위(productRules)를 벗어났는지 — 우측 패널 알림에 표시
   const selectedSizeIssues = (() => {
     if (!selectedRoomItem) return [] as { label: string; val: number; min: number; max: number }[];
     const r = productRules[selectedRoomItem.input.productType];
@@ -438,20 +506,60 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     if (inp.depth_mm < r.minDepth || inp.depth_mm > r.maxDepth) out.push({ label: "깊이", val: inp.depth_mm, min: r.minDepth, max: r.maxDepth });
     return out;
   })();
-  const sizeIssueSig = selectedRoomItem ? `${roomSelected}:${selectedSizeIssues.map((i) => `${i.label}${i.val}`).join(",")}` : "";
-  const showSizeWarn = selectedSizeIssues.length > 0 && sizeWarnDismissed !== sizeIssueSig;
   function snapSelectedToValid() {
     if (!selectedRoomItem) return;
     const r = productRules[selectedRoomItem.input.productType];
     if (!r) return;
     const inp = selectedRoomItem.input;
+    const nextHeight = Math.min(r.maxHeight, Math.max(r.minHeight, inp.height_mm));
+    const nextDepth = Math.min(r.maxDepth, Math.max(r.minDepth, inp.depth_mm));
     commitRoomItem({
       ...inp,
       width_mm: Math.min(r.maxWidth, Math.max(r.minWidth, inp.width_mm)),
-      height_mm: Math.min(r.maxHeight, Math.max(r.minHeight, inp.height_mm)),
-      depth_mm: Math.min(r.maxDepth, Math.max(r.minDepth, inp.depth_mm)),
+      height_mm: nextHeight,
+      depth_mm: nextDepth,
+      // 주방 세트는 kitchen_base_* 가 원본(normalizeInput이 height/depth를 여기서 재계산) — 함께 맞춰야 실제 반영된다
+      ...(inp.productType === "kitchen_full_set" ? { kitchen_base_height_mm: nextHeight, kitchen_base_depth_mm: nextDepth } : {}),
     });
   }
+  // 이슈 코드별 원클릭 해결 — 패널 알림에서 버튼 하나로 바로 고친다 (검증 룰과 짝: lib/order-validation/validators)
+  const ISSUE_QUICK_FIXES: Record<string, { label: string; patch: Partial<FurnitureInput> }> = {
+    MISSING_BASE_SUPPORT: { label: "걸레받이 추가 (100mm)", patch: { toe_kick_option: "standard_100" } },
+    KITCHEN_BASE_DEPTH_TOO_SMALL: { label: "깊이 500mm로 맞추기", patch: { depth_mm: 500, kitchen_base_depth_mm: 500 } },
+  };
+  // 선택 가구의 주문 검증/규격 이탈 — 사유와 즉시 해결 버튼을 우측 패널 알림으로(별도 배너 없음)
+  const selectedNotice = (() => {
+    if (!selectedRoomItem) return null;
+    const hasSizeIssue = selectedSizeIssues.length > 0;
+    const result = roomSelected === "current" ? validation : validateOrderInput(selectedRoomItem.input);
+    if (result.verdict !== "ready") {
+      // 필수 입력 누락(상판 선택 등)은 하단 CTA·검수 탭이 안내 — 패널에는 규격/제작 규칙 위반만
+      const ruleIssues = result.issues.filter((i) => i.source !== "missing_input");
+      const issue = ruleIssues.find((i) => i.level === "error") ?? ruleIssues.find((i) => i.level === "warning");
+      if (issue) {
+        const quickFix = ISSUE_QUICK_FIXES[issue.code];
+        return {
+          level: result.verdict === "blocked" ? ("error" as const) : ("warning" as const),
+          text: issue.message,
+          actionLabel: quickFix ? quickFix.label : hasSizeIssue ? "권장값으로 맞추기" : undefined,
+          onAction: quickFix
+            ? () => commitRoomItem({ ...selectedRoomItem.input, ...quickFix.patch })
+            : hasSizeIssue
+              ? snapSelectedToValid
+              : undefined,
+        };
+      }
+    }
+    if (hasSizeIssue) {
+      return {
+        level: "warning" as const,
+        text: selectedSizeIssues.map((i) => `${i.label} ${i.val}mm (권장 ${i.min}~${i.max}mm)`).join(" · "),
+        actionLabel: "권장값으로 맞추기",
+        onAction: snapSelectedToValid,
+      };
+    }
+    return null;
+  })();
   // 핸들 드래그 리사이즈 — 잡은 쪽만 늘리고(앵커 center) 이웃/벽에 스냅 + 가이드, 침범은 막음
   function resizeRoomItem(id: string, patch: Partial<FurnitureInput>, center?: { x: number; z: number }, dirArg?: { x: number; z: number }) {
     const item = roomItems.find((it) => it.id === id);
@@ -596,7 +704,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     // 방금 추가한 가구를 선택 + 파란 테두리로 어디 들어갔는지 안내(잠시 후 자동 해제)
     setRoomSelected(item.id);
     setJustAddedId(item.id);
-    setControlsOpen(true);
+    setAddOpen(false);
+    setCanvasMode("edit");
     window.setTimeout(() => setJustAddedId((cur) => (cur === item.id ? null : cur)), 3500);
   }
 
@@ -614,7 +723,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     setViewMode("room");
     setRoomSelected(item.id);
     setJustAddedId(item.id);
-    setControlsOpen(true);
+    setCanvasMode("edit");
     window.setTimeout(() => setJustAddedId((cur) => (cur === item.id ? null : cur)), 3500);
   }
   function duplicateRoomItem(id: string) {
@@ -753,12 +862,61 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const activeDoorOptions = getDoorCountOptions(activeInput.productType, activeInput.width_mm, activeInput.has_door);
   const showSwingChips = activeInput.has_door && (activeInput.productType === "custom_shelf" || activeInput.productType === "gap_cabinet" || activeInput.productType === "shoe_cabinet");
 
-  // 간편(소비자) 모드에서는 설비(주방 모델 선택) 같은 전문 카테고리를 숨긴다(소재·규격·모듈·문·검수만)
-  const categories = getEditorCategories(activeInput.productType, isPro).filter((c) => isPro || c.id !== "fixtures");
+  // 간편(소비자) 모드에서는 설비(주방 모델 선택) 같은 전문 카테고리를 숨긴다.
+  // 소재는 미리보기 우측 패널(가구 선택 시)로 이동 — 상단 카테고리에서 제거해 버튼 수를 줄인다.
+  const categories = getEditorCategories(activeInput.productType, isPro).filter((c) => (isPro || c.id !== "fixtures") && c.id !== "material");
   // effectiveCat: 데스크톱 2분할 패널이 항상 표시할 칸(미선택 시 첫 칸). 모바일 팝업은 activeCat != null일 때만 뜬다.
   const effectiveCat = activeCat ?? categories[0]?.id ?? null;
   const activeLabel = categories.find((cat) => cat.id === activeCat)?.label ?? "";
   const effectiveLabel = categories.find((cat) => cat.id === effectiveCat)?.label ?? "";
+
+  // '＋ 가구 추가' 시트 내용 — 데스크톱(캔버스 위 반투명 플로팅)과 모바일(섹션 아래)이 공유
+  const addSheetBody = (
+    <>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] font-black text-ink">가구 추가</span>
+        <button type="button" onClick={() => { setAddOpen(false); setPickerSlug(null); }} aria-label="닫기" className="grid h-6 w-6 place-items-center rounded-md bg-soft text-sm font-black leading-none text-slate-500 hover:bg-slate-100">×</button>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {catalogCategories.flatMap((cat) => cat.slugs).map((slug) => {
+          const presets = roomAddPresets[slug];
+          const active = pickerSlug === slug;
+          return (
+            <button
+              key={slug}
+              type="button"
+              title={`${productLabels[slug] ?? slug} ${presets ? "규격 선택" : "추가"}`}
+              onClick={() => (presets ? setPickerSlug(active ? null : slug) : addFurnitureToRoom(slug))}
+              className={`group flex w-[76px] shrink-0 flex-col items-center gap-1 rounded-xl border bg-white/80 p-1.5 transition hover:bg-white hover:shadow-sm active:scale-95 ${active ? "border-brand ring-2 ring-brand/30" : "border-slate-200/70 hover:border-brand"}`}
+            >
+              <span className="flex aspect-square w-full items-center justify-center rounded-lg bg-slate-50/70">
+                <ProductArt slug={slug} className="h-11 w-11" />
+              </span>
+              <span className="line-clamp-1 w-full text-center text-[10px] font-black text-slate-700">{productLabels[slug] ?? slug}</span>
+            </button>
+          );
+        })}
+      </div>
+      {pickerSlug && roomAddPresets[pickerSlug] && (
+        <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 p-2">
+          <div className="mb-1.5 text-[11px] font-black text-brand">{productLabels[pickerSlug] ?? pickerSlug} 규격 — 누르면 바로 추가돼요</div>
+          <div className="flex flex-wrap gap-1.5">
+            {roomAddPresets[pickerSlug]!.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => addFurnitureToRoom(pickerSlug, { width_mm: p.width_mm, height_mm: p.height_mm, depth_mm: p.depth_mm })}
+                className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-black text-slate-700 ring-1 ring-slate-200 transition hover:ring-brand active:scale-95"
+              >
+                폭 {p.label}mm
+                <span className="ml-1 text-[10px] font-bold text-slate-400">H{p.height_mm}·D{p.depth_mm}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <EditorShell
@@ -787,60 +945,93 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       }
       canvas={
         <div className="relative h-full w-full">
+          {/* Phase 1: 주방 세트 신규 생성 시 프리셋 픽커를 먼저 (빈 캔버스 대신 완성 구성에서 시작) */}
+          {showKitchenPreset && input.productType === "kitchen_full_set" && (
+            <div className="absolute inset-0 z-40 flex items-start justify-center overflow-auto bg-slate-50/95 p-4 backdrop-blur-sm sm:items-center">
+              <div className="w-full max-w-lg">
+                <KitchenPresetPicker
+                  currentInput={input}
+                  onApply={(next) => {
+                    setInput(normalizeInput(next));
+                    setShowKitchenPreset(false);
+                  }}
+                  onSkip={() => setShowKitchenPreset(false)}
+                />
+              </div>
+            </div>
+          )}
           {!(isModularProduct && isPro && viewMode === "2d") ? (
             <>
-              <RoomScene items={roomItems} placements={roomPlacements} selectedId={roomSelected} highlightId={justAddedId} expert={isPro} onSelect={setRoomSelected} onMove={moveRoomItem} onMoveEnd={endRoomMove} onResize={resizeRoomItem} onCommitItem={commitRoomItemById} showDimensions={showDimensions} doorsOpen={doorsOpen} guides={roomGuides} floor={roomFloor} />
+              <RoomScene items={roomItems} placements={roomPlacements} selectedId={roomSelected} highlightId={justAddedId} expert={isPro} editable={canvasMode === "edit"} onSelect={setRoomSelected} onMove={moveRoomItem} onMoveEnd={endRoomMove} onResize={resizeRoomItem} onCommitItem={commitRoomItemById} onRotateItem={rotateRoomItem} onDuplicateItem={duplicateRoomItem} onRemoveItem={removeRoomItem} selectedNotice={selectedNotice} mobilePanelHost={mobilePanelHost} showDimensions={showDimensions} doorsOpen={doorsOpen} guides={roomGuides} floor={roomFloor} />
 
-              {/* 뷰 옵션(아이콘) — 치수 표시 / 문 열림. 자주 쓰는 보기 토글이라 미리보기 좌상단에 */}
-              <div className="pointer-events-auto absolute left-3 top-3 z-20 flex items-center gap-1.5">
-                <button type="button" title="치수 표시" aria-label="치수 표시" aria-pressed={showDimensions} onClick={() => setShowDimensions((v) => !v)} className={`grid h-9 w-9 place-items-center rounded-full border shadow-sm backdrop-blur transition ${showDimensions ? "border-brand bg-brand text-white" : "border-slate-200 bg-white/90 text-slate-500"}`}>
+              {/* 통합 툴바 — 보기/수정 모드 · 치수 · 문열림 · 자동정렬 · 실행취소를 한 곳에(글래스 바) */}
+              <div className="pointer-events-auto absolute left-3 top-3 z-20 flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-white/85 p-1 shadow-lg shadow-slate-900/5 backdrop-blur-md">
+                <div className="flex rounded-xl bg-slate-100/80 p-0.5 text-[11px] font-black">
+                  {([["view", "보기"], ["edit", "수정"]] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setCanvasMode(mode);
+                        if (mode === "view") {
+                          setRoomSelected(null);
+                          setRoomGuides([]);
+                          setAddOpen(false);
+                        }
+                      }}
+                      className={`rounded-lg px-2.5 py-1.5 transition ${canvasMode === mode ? "bg-white text-brand shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mx-0.5 h-5 w-px bg-slate-200" />
+                <button type="button" title="치수 표시" aria-label="치수 표시" aria-pressed={showDimensions} onClick={() => setShowDimensions((v) => !v)} className={`grid h-8 w-8 place-items-center rounded-xl transition ${showDimensions ? "bg-brand text-white" : "text-slate-500 hover:bg-slate-100"}`}>
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="8" width="18" height="8" rx="1.5" /><path d="M7 8v3M11 8v4M15 8v3M19 8v4" strokeLinecap="round" /></svg>
                 </button>
-                <button type="button" title="문 열림" aria-label="문 열림" aria-pressed={doorsOpen} onClick={() => setDoorsOpen((v) => !v)} className={`grid h-9 w-9 place-items-center rounded-full border shadow-sm backdrop-blur transition ${doorsOpen ? "border-brand bg-brand text-white" : "border-slate-200 bg-white/90 text-slate-500"}`}>
+                <button type="button" title="문 열림" aria-label="문 열림" aria-pressed={doorsOpen} onClick={() => setDoorsOpen((v) => !v)} className={`grid h-8 w-8 place-items-center rounded-xl transition ${doorsOpen ? "bg-brand text-white" : "text-slate-500 hover:bg-slate-100"}`}>
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 4 6 6v13l8 2V4Z" strokeLinejoin="round" /><path d="M14 4h4v15h-4M10.5 12v1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
-                <button type="button" title="자동 정렬" aria-label="자동 정렬" onClick={resetRoomLayout} className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white/90 text-slate-500 shadow-sm backdrop-blur transition hover:bg-white">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 6h10M4 12h16M4 18h7" strokeLinecap="round" /><path d="M18 7l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </button>
+                {canvasMode === "edit" && (
+                  <>
+                    <button type="button" title="자동 정렬" aria-label="자동 정렬" onClick={resetRoomLayout} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 6h10M4 12h16M4 18h7" strokeLinecap="round" /><path d="M18 7l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </button>
+                    <div className="mx-0.5 h-5 w-px bg-slate-200" />
+                    <button type="button" title="되돌리기" aria-label="되돌리기" disabled={!canUndo} onClick={undo} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 disabled:opacity-30">
+                      <UndoIcon />
+                    </button>
+                    <button type="button" title="다시실행" aria-label="다시실행" disabled={!canRedo} onClick={redo} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 disabled:opacity-30">
+                      <RedoIcon />
+                    </button>
+                  </>
+                )}
               </div>
-
-              {/* 비정상 사이즈 경고 — 권장 범위를 벗어나면 안내 + 권장값/무시 선택 */}
-              {showSizeWarn && (
-                <div className="pointer-events-auto absolute left-1/2 top-3 z-30 w-[min(92%,440px)] -translate-x-1/2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 shadow-lg">
-                  <p className="text-[11px] font-black text-amber-800">⚠ 비정상적인 사이즈예요</p>
-                  <p className="mt-0.5 text-[10px] font-bold leading-4 text-amber-700">
-                    {selectedSizeIssues.map((i) => `${i.label} ${i.val}mm (권장 ${i.min}~${i.max}mm)`).join(" · ")}
-                  </p>
-                  <div className="mt-1.5 flex gap-1.5">
-                    <button type="button" onClick={snapSelectedToValid} className="rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-black text-white hover:bg-amber-600">권장값으로 맞추기</button>
-                    <button type="button" onClick={() => setSizeWarnDismissed(sizeIssueSig)} className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-black text-amber-700 ring-1 ring-amber-300 hover:bg-amber-100">무시하고 계속</button>
-                  </div>
-                </div>
-              )}
-
-              {/* 선택 가구 빠른 컨트롤(회전·삭제) — 접힌 카드에 가려지지 않게 항상 우상단에 */}
-              {roomSelected && (
-                <div className="pointer-events-auto absolute right-3 top-3 z-20 flex items-center gap-1.5">
-                  <button type="button" title="90° 회전" aria-label="90° 회전" onClick={() => rotateRoomItem(roomSelected)} className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white/90 text-slate-600 shadow-sm backdrop-blur hover:bg-white">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" strokeLinecap="round" /><path d="M5 3v4h4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  </button>
-                  <button type="button" title="복제 (Ctrl+C/V)" aria-label="복제" onClick={() => duplicateRoomItem(roomSelected)} className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white/90 text-slate-600 shadow-sm backdrop-blur hover:bg-white">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h8" strokeLinecap="round" /></svg>
-                  </button>
-                  <button type="button" title="삭제" aria-label="삭제" onClick={() => removeRoomItem(roomSelected)} className="grid h-9 w-9 place-items-center rounded-full border border-rose-200 bg-rose-50 text-rose-600 shadow-sm backdrop-blur hover:bg-rose-100">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  </button>
-                </div>
-              )}
 
               {/* AI 명령 채팅 — 자연어로 가구/공간 만들기(기존 동작만) */}
               {chatOpen && (
-                <div className="pointer-events-none absolute right-3 top-3 bottom-3 z-30 flex w-[min(86%,340px)] justify-end">
+                <div className="pointer-events-none absolute right-3 top-3 bottom-3 z-50 flex w-[min(86%,340px)] justify-end">
                   <RoomCommandChat state={roomStateSummary} onActions={runRoomActions} onClose={() => setChatOpen(false)} />
                 </div>
               )}
 
-              {/* 가구 추가·배치 컨트롤은 미리보기 아래(belowCanvas)로 이동 — 가격을 가리지 않게 */}
+              {/* ＋ 가구 추가 — 버튼은 캔버스 하단 플로팅. 시트는 데스크톱=캔버스 위 반투명, 모바일=섹션 아래(belowCanvas) */}
+              {canvasMode === "edit" && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex flex-col items-center gap-2 px-3">
+                  {addOpen && (
+                    <div className="pointer-events-auto w-[min(100%,560px)] rounded-2xl border border-white/60 bg-white/70 p-3 shadow-xl shadow-slate-900/10 backdrop-blur-[3px] max-sm:hidden">
+                      {addSheetBody}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAddOpen((v) => !v)}
+                    className={`pointer-events-auto flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[12px] font-black shadow-lg backdrop-blur-md transition active:scale-95 ${addOpen ? "bg-slate-900 text-white" : "border border-slate-200/70 bg-white/90 text-slate-700 hover:border-brand hover:text-brand"}`}
+                  >
+                    <span className="text-base leading-none">＋</span> 가구 추가
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <section className="h-full w-full overflow-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
@@ -887,127 +1078,12 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       }
       belowCanvas={
         !(isModularProduct && isPro && viewMode === "2d") ? (
-          <div className="mt-2">
-            <div className="mr-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-              {controlsOpen && (
-              <div>
-
-              {/* 선택 가구 편집 — 누른 가구의 옵션을 바로 수정 */}
-              {selectedRoomItem && (
-                <div className="space-y-2 border-t border-slate-100 px-3 py-2">
-                  <div className="text-[11px] font-black text-brand">선택 가구 편집 — {selectedRoomItem.name}</div>
-                  {selectedRoomItem.input.productType !== "kitchen_full_set" && (
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {([["width_mm", "가로"], ["height_mm", "높이"], ["depth_mm", "깊이"]] as const).map(([key, label]) => (
-                        <label key={key} className="text-[10px] font-bold text-slate-500">
-                          {label}(mm)
-                          <input
-                            key={`${selectedRoomItem.id}-${key}-${selectedRoomItem.input[key]}`}
-                            type="number"
-                            defaultValue={selectedRoomItem.input[key]}
-                            onBlur={(e) => commitRoomItem({ ...selectedRoomItem.input, [key]: Math.max(50, Math.round(Number(e.target.value))) })}
-                            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                            className="mt-0.5 w-full rounded-lg border border-slate-300 px-1.5 py-1 text-right text-xs font-bold text-slate-800 outline-none focus:border-brand"
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  <div>
-                    <div className="mb-1 text-[10px] font-black text-slate-400">소재</div>
-                    <div className="flex flex-wrap gap-1">
-                      {materials.map((m) => (
-                        <button
-                          key={m.name}
-                          type="button"
-                          title={m.name}
-                          onClick={() => commitRoomItem({ ...selectedRoomItem.input, material: m.name, color: m.color })}
-                          className={`h-6 w-6 rounded-full border border-white/60 ${selectedRoomItem.input.material === m.name ? "ring-2 ring-brand" : "ring-1 ring-slate-200"}`}
-                          style={{ background: m.tone }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  {selectedRoomItem.input.productType === "kitchen_full_set" && (() => {
-                    const dim = getKitchenSetDimensions(selectedRoomItem.input);
-                    const fields = [
-                      { key: "kitchen_base_height_mm", label: "하부장 높이", val: dim.baseHeightMm, lim: KITCHEN_DIMENSION_LIMITS.baseHeight },
-                      { key: "kitchen_base_depth_mm", label: "하부장 깊이", val: dim.baseDepthMm, lim: KITCHEN_DIMENSION_LIMITS.baseDepth },
-                      { key: "kitchen_wall_height_mm", label: "상부장 높이", val: dim.wallHeightMm, lim: KITCHEN_DIMENSION_LIMITS.wallHeight },
-                      { key: "kitchen_wall_depth_mm", label: "상부장 깊이", val: dim.wallDepthMm, lim: KITCHEN_DIMENSION_LIMITS.wallDepth },
-                    ] as const;
-                    return (
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-black text-slate-400">상하부장 치수</div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {fields.map((f) => (
-                            <label key={f.key} className="text-[10px] font-bold text-slate-500">
-                              {f.label}(mm)
-                              <input
-                                key={`${selectedRoomItem.id}-${f.key}-${f.val}`}
-                                type="number"
-                                min={f.lim.min}
-                                max={f.lim.max}
-                                step={f.lim.step}
-                                defaultValue={f.val}
-                                onBlur={(e) => commitRoomItem({ ...selectedRoomItem.input, [f.key]: snapKitchenDimensionMm(Number(e.target.value), f.lim.min, f.lim.max, f.lim.step) } as FurnitureInput)}
-                                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                                className="mt-0.5 w-full rounded-lg border border-slate-300 px-1.5 py-1 text-right text-xs font-bold text-slate-800 outline-none focus:border-brand"
-                              />
-                            </label>
-                          ))}
-                        </div>
-                        <p className="text-[10px] font-bold text-amber-600">칸별 폭·구성·설비는 {roomSelected === "current" ? "‘3D 보기’ 탭에서 캐비닛을 눌러" : "해당 상품 페이지에서"} 편집하세요.</p>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-              <div className="border-t border-slate-100 px-3 py-2">
-                <div className="mb-1 text-[11px] font-black text-slate-500">+ 가구 추가</div>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {catalogCategories.flatMap((cat) => cat.slugs).map((slug) => {
-                    const presets = roomAddPresets[slug];
-                    const active = pickerSlug === slug;
-                    return (
-                      <button
-                        key={slug}
-                        type="button"
-                        title={`${productLabels[slug] ?? slug} ${presets ? "규격 선택" : "추가"}`}
-                        onClick={() => (presets ? setPickerSlug(active ? null : slug) : addFurnitureToRoom(slug))}
-                        className={`group flex w-[80px] shrink-0 flex-col items-center gap-1 rounded-xl border bg-white p-1.5 transition hover:shadow-sm active:scale-95 ${active ? "border-brand ring-2 ring-brand/30" : "border-slate-200 hover:border-brand"}`}
-                      >
-                        <span className="flex aspect-square w-full items-center justify-center rounded-lg bg-slate-50">
-                          <ProductArt slug={slug} className="h-12 w-12" />
-                        </span>
-                        <span className="line-clamp-1 w-full text-center text-[10px] font-black text-slate-700">{productLabels[slug] ?? slug}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* 2단계: 규격(사이즈) 선택 — 누르면 그 규격으로 추가 */}
-                {pickerSlug && roomAddPresets[pickerSlug] && (
-                  <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 p-2">
-                    <div className="mb-1.5 text-[11px] font-black text-brand">{productLabels[pickerSlug] ?? pickerSlug} 규격 선택 — 누르면 바로 추가돼요</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {roomAddPresets[pickerSlug]!.map((p) => (
-                        <button
-                          key={p.label}
-                          type="button"
-                          onClick={() => addFurnitureToRoom(pickerSlug, { width_mm: p.width_mm, height_mm: p.height_mm, depth_mm: p.depth_mm })}
-                          className="rounded-lg bg-white px-3 py-2 text-[12px] font-black text-slate-700 ring-1 ring-slate-200 transition hover:ring-brand active:scale-95"
-                        >
-                          폭 {p.label}mm
-                          <span className="ml-1 text-[10px] font-bold text-slate-400">H{p.height_mm}·D{p.depth_mm}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              </div>
-              )}
-            </div>
+          <div className="mt-2 space-y-2 sm:hidden">
+            {/* 모바일: 사이즈 패널(RoomScene이 포털로 채움)과 가구추가 시트를 미리보기 아래에 — 화면을 가리지 않게 */}
+            <div ref={setMobilePanelHost} />
+            {canvasMode === "edit" && addOpen && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-card">{addSheetBody}</div>
+            )}
           </div>
         ) : null
       }
@@ -1310,19 +1386,22 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
         </>
       }
       footer={
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 lg:max-w-6xl">
-            <div>
-              <div className="text-xs font-bold text-slate-500">예상 견적</div>
-              <div className="text-2xl font-black text-brand">{formatMoney(quote.finalPrice)}</div>
-              <div className="text-[11px] font-semibold text-slate-500">
-                원판 {quote.sheetCount}장 · 마진 {(quote.marginRate * 100).toFixed(0)}%
-                {quote.verdictResult ? ` · ${quote.verdictResult.verdict}` : ""}
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3">
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 sm:gap-3 lg:max-w-6xl">
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-slate-500 sm:text-xs">예상 견적</div>
+              <div className="truncate text-xl font-black text-brand sm:text-2xl">{formatMoney(quote.finalPrice)}</div>
+              {/* 상태 표기는 CTA와 같은 기준(주문 검증 verdict)으로 통일 — 견적 verdict와 섞이면 혼란 */}
+              <div className="truncate text-[11px] font-semibold text-slate-500">
+                원판 {quote.sheetCount}장 · 마진 {(quote.marginRate * 100).toFixed(0)}% · {ORDER_VERDICT_LABELS[validation.verdict]}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              {/* 모바일에선 아이콘만 — 좁은 화면에서 CTA가 잘리지 않게 */}
               <button
                 type="button"
+                title="장바구니 담기"
+                aria-label="장바구니 담기"
                 disabled={!canPlaceOrder}
                 onClick={() => {
                   addConfiguredItem(input.productType, isManual && manualTitle ? manualTitle : product.name, input, 1, {
@@ -1332,9 +1411,14 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                   setAdded(true);
                   window.setTimeout(() => setAdded(false), 1600);
                 }}
-                className="rounded-2xl border-2 border-brand px-4 py-3 text-sm font-black text-brand disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                className="rounded-2xl border-2 border-brand px-3 py-2.5 text-[13px] font-black text-brand disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300 sm:px-4 sm:py-3 sm:text-sm"
               >
-                {added ? "담김 ✓" : "장바구니 담기"}
+                <span className="sm:hidden" aria-hidden="true">
+                  {added ? "✓" : (
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="20" r="1.4" /><circle cx="17" cy="20" r="1.4" /><path d="M3 4h2l2.4 12h10.2L20 7H6" /></svg>
+                  )}
+                </span>
+                <span className="max-sm:hidden">{added ? "담김 ✓" : "장바구니 담기"}</span>
               </button>
               <button
                 type="button"
@@ -1346,7 +1430,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                   });
                   router.push("/cart");
                 }}
-                className="rounded-2xl bg-brand px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="whitespace-nowrap rounded-2xl bg-brand px-3.5 py-2.5 text-[13px] font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300 sm:px-5 sm:py-3 sm:text-sm"
               >
                 {ORDER_VERDICT_CTA[validation.verdict]}
               </button>
