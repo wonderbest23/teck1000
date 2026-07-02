@@ -26,6 +26,7 @@ import { KitchenDrawingView } from "@/components/admin/KitchenDrawingView";
 import { KitchenPresetPicker } from "@/components/preview3d/controls/KitchenPresetPicker";
 import { KITCHEN_PRESETS, applyKitchenPreset, type KitchenPreset } from "@/lib/kitchenPresets";
 import { getEditorCategories } from "@/lib/productEditorSchema";
+import { applyStartPreset } from "@/lib/startPresets";
 import { autoArrange, getFootprint, ROOM_BACK, type Placement, type RoomItem } from "@/components/preview3d/roomLayout";
 import { useInputHistory } from "@/lib/hooks/useInputHistory";
 import { validateOrderInput, ORDER_VERDICT_CTA, ORDER_VERDICT_LABELS } from "@/lib/order-validation";
@@ -46,9 +47,10 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const manualTitle = searchParams.get("title") ?? "";
   const manualNote = searchParams.get("note") ?? "";
   const isManual = searchParams.get("manual") === "1";
+  const starterPreset = searchParams.get("starter");
 
   const initialInput = useMemo<FurnitureInput>(() => {
-    const base = getInitialInput(productType);
+    const base = applyStartPreset(getInitialInput(productType), starterPreset);
     if (!isManual) return base;
     const width = Number(searchParams.get("w"));
     const height = Number(searchParams.get("h"));
@@ -129,7 +131,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const [doorsOpen, setDoorsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"2d" | "room">("room");
   const [previewFullScreen, setPreviewFullScreen] = useState(false);
-  const [showStartChoice, setShowStartChoice] = useState(true);
+  const [showStartChoice, setShowStartChoice] = useState(searchParams.get("start_choice") === "1");
   const [startStep, setStartStep] = useState<"intro" | "category">("intro");
   const [selModule, setSelModule] = useState<number | null>(null);
   // 내 공간(멀티 가구 씬) 배치/선택
@@ -376,6 +378,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     "built_in_wardrobe",
     "shoe_cabinet",
     "gap_cabinet",
+    "desk",
+    "living_cabinet",
     "custom_shelf",
   ]); // kitchen_island(아일랜드)만 방 중앙 허용
   function isWallBound(id: string) {
@@ -947,33 +951,85 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const roomStateSummary: RoomStateSummary = useMemo(
     () => ({
       items: roomItems.map((it) => ({ id: it.id, name: it.name, productType: it.input.productType, width_mm: it.input.width_mm, height_mm: it.input.height_mm, depth_mm: it.input.depth_mm })),
-      selectedId: roomSelected,
+      // 선택 없을 때도 '현재 제작 중' 가구(id=current)를 AI·modify 기본 대상으로
+      selectedId: roomSelected ?? "current",
     }),
     [roomItems, roomSelected],
   );
+  function applyRoomActionModify(inp: FurnitureInput, action: RoomAction): FurnitureInput {
+    let draft = { ...inp };
+    if (action.material) {
+      const m = materials.find((x) => x.name === action.material);
+      if (m) { draft.material = m.name; draft.color = m.color; }
+    }
+    if (action.door_style) draft.door_style = action.door_style;
+
+    const rules = productRules[draft.productType];
+    const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
+
+    if (action.width_mm != null) {
+      const target = rules ? clamp(action.width_mm, rules.minWidth, rules.maxWidth) : action.width_mm;
+      if (draft.productType === "kitchen_full_set" || draft.productType === "kitchen_base_cabinet" || draft.productType === "kitchen_wall_cabinet") {
+        const modules =
+          draft.productType === "kitchen_wall_cabinet"
+            ? (draft.kitchen_wall_modules_mm ?? draft.kitchen_modules_mm ?? [])
+            : (draft.kitchen_base_modules_mm ?? draft.kitchen_modules_mm ?? []);
+        const moduleCount = Math.max(2, modules.length || 4);
+        const currentTotal = modules.reduce((sum, w) => sum + w, 0);
+        const fitted = currentTotal > target ? fitKitchenModulesToWidth(draft, target) : null;
+        const nextBase = fitted ? fitted.main : distributeKitchenTotalWidth(target, moduleCount);
+        const nextWall = fitted ? fitted.wall : distributeKitchenTotalWidth(target, moduleCount);
+        draft = {
+          ...draft,
+          width_mm: target,
+          kitchen_modules_mm: nextBase,
+          ...(draft.productType !== "kitchen_wall_cabinet"
+            ? { kitchen_base_modules_mm: nextBase }
+            : {}),
+          ...(draft.productType === "kitchen_full_set" || draft.productType === "kitchen_wall_cabinet"
+            ? { kitchen_wall_modules_mm: nextWall }
+            : {}),
+        };
+      } else if (draft.productType === "built_in_wardrobe") {
+        const layout = normalizeWardrobeModules(draft.wardrobe_modules_mm, draft.wardrobe_module_types, target);
+        draft = { ...draft, width_mm: layout.width_mm, wardrobe_modules_mm: layout.modules, wardrobe_module_types: layout.moduleTypes };
+      } else {
+        draft.width_mm = target;
+      }
+    }
+    if (action.height_mm != null) {
+      const target = rules ? clamp(action.height_mm, rules.minHeight, rules.maxHeight) : action.height_mm;
+      draft.height_mm = target;
+      if (draft.productType === "kitchen_full_set" || draft.productType === "kitchen_base_cabinet") draft.kitchen_base_height_mm = target;
+      if (draft.productType === "kitchen_full_set") draft.kitchen_wall_height_mm = draft.kitchen_wall_height_mm ?? target;
+      if (draft.productType === "kitchen_wall_cabinet") draft.kitchen_wall_height_mm = target;
+    }
+    if (action.depth_mm != null) {
+      const target = rules ? clamp(action.depth_mm, rules.minDepth, rules.maxDepth) : action.depth_mm;
+      draft.depth_mm = target;
+      if (draft.productType === "kitchen_full_set" || draft.productType === "kitchen_base_cabinet") draft.kitchen_base_depth_mm = target;
+      if (draft.productType === "kitchen_full_set") draft.kitchen_wall_depth_mm = draft.kitchen_wall_depth_mm ?? target;
+      if (draft.productType === "kitchen_wall_cabinet") draft.kitchen_wall_depth_mm = target;
+    }
+    return normalizeInput(draft);
+  }
   function runRoomActions(actions: RoomAction[]) {
+    const targetId = roomSelected ?? "current";
     for (const a of actions) {
       if (a.type === "add" && a.productType) {
         addFurnitureToRoom(a.productType, a);
       } else if (a.type === "arrange") {
         resetRoomLayout();
       } else if (a.type === "rotate") {
-        if (roomSelected) rotateRoomItem(roomSelected);
+        rotateRoomItem(targetId);
       } else if (a.type === "remove") {
-        if (roomSelected) removeRoomItem(roomSelected);
+        if (targetId !== "current") removeRoomItem(targetId);
       } else if (a.type === "modify") {
-        const sel = roomItems.find((it) => it.id === roomSelected);
+        const sel = roomItems.find((it) => it.id === targetId);
         if (sel) {
-          const draft = { ...sel.input };
-          if (a.width_mm) draft.width_mm = a.width_mm;
-          if (a.height_mm) draft.height_mm = a.height_mm;
-          if (a.depth_mm) draft.depth_mm = a.depth_mm;
-          if (a.door_style) draft.door_style = a.door_style;
-          if (a.material) {
-            const m = materials.find((x) => x.name === a.material);
-            if (m) { draft.material = m.name; draft.color = m.color; }
-          }
-          commitRoomItemById(sel.id, draft);
+          commitRoomItemById(sel.id, applyRoomActionModify(sel.input, a));
+          setRoomSelected(sel.id);
+          setCanvasMode("edit");
         }
       }
     }
@@ -1072,7 +1128,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const setActiveMaterial = (name: string, color: string) => commitRoomItemById(activeRoomId, { ...activeInput, material: name, color });
   const activeRules = productRules[activeInput.productType];
   const activeDoorOptions = getDoorCountOptions(activeInput.productType, activeInput.width_mm, activeInput.has_door);
-  const showSwingChips = activeInput.has_door && (activeInput.productType === "custom_shelf" || activeInput.productType === "gap_cabinet" || activeInput.productType === "shoe_cabinet");
+  const showSwingChips = activeInput.has_door && (activeInput.productType === "custom_shelf" || activeInput.productType === "gap_cabinet" || activeInput.productType === "shoe_cabinet" || activeInput.productType === "living_cabinet");
 
   // 간편(소비자) 모드에서는 설비(주방 모델 선택) 같은 전문 카테고리를 숨긴다.
   // 소재는 미리보기 우측 패널로, 검수·주문은 하단 CTA(주문 버튼)로 이동 — 상단 카테고리 버튼 수를 줄인다.
@@ -1097,6 +1153,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const currentGuide = beginnerSteps[currentGuideIndex] ?? beginnerSteps[0];
   const needCategories = [
     { id: "kitchen", label: "주방", hint: "싱크대·상부장·아일랜드" },
+    { id: "office", label: "오피스", hint: "책상·사이드장" },
+    { id: "living", label: "거실", hint: "인테리어장·TV장" },
     { id: "storage", label: "수납", hint: "서랍장·선반장·틈새장" },
     { id: "entrance", label: "현관", hint: "신발장" },
     { id: "wardrobe", label: "붙박이", hint: "옷장·드레스룸" },
@@ -1106,6 +1164,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     { id: "kitchen_base_cabinet", label: "하부장", slug: "kitchen_base_cabinet", category: "kitchen", hint: "싱크볼·서랍 가능" },
     { id: "kitchen_wall_cabinet", label: "상부장", slug: "kitchen_wall_cabinet", category: "kitchen", hint: "후드장·수납" },
     { id: "kitchen_island", label: "아일랜드", slug: "kitchen_island", category: "kitchen", hint: "독립 조리대" },
+    { id: "desk", label: "책상", slug: "desk", category: "office", hint: "재택·학습 데스크" },
+    { id: "living_cabinet", label: "인테리어장", slug: "living_cabinet", category: "living", hint: "TV장·벽장·장식장" },
     { id: "drawer_cabinet", label: "서랍장", slug: "custom_shelf", category: "storage", hint: "레일 서랍형" },
     { id: "custom_shelf", label: "선반장", slug: "custom_shelf", category: "storage", hint: "오픈/도어 수납" },
     { id: "gap_cabinet", label: "틈새장", slug: "gap_cabinet", category: "storage", hint: "좁은 공간" },
@@ -1114,6 +1174,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   ];
   const startProductByCategory: Record<string, QuickProductId> = {
     kitchen: "kitchen_full_set",
+    office: "desk",
+    living: "living_cabinet",
     storage: "drawer_cabinet",
     entrance: "shoe_cabinet",
     wardrobe: "built_in_wardrobe",
@@ -1227,7 +1289,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       appendWardrobeModule(kind === "drawer" ? "drawer" : kind === "open" ? "shelf" : "shelf");
       return;
     }
-    if (["custom_shelf", "gap_cabinet", "shoe_cabinet"].includes(activeInput.productType)) {
+    if (["desk", "custom_shelf", "gap_cabinet", "shoe_cabinet"].includes(activeInput.productType)) {
       const nextDrawerCount = kind === "drawer" ? Math.min(4, Math.max(1, (activeInput.storage_drawer_count ?? 0) + 1)) : activeInput.storage_drawer_count ?? 0;
       commitRoomItemById(activeRoomId, {
         ...activeInput,
@@ -1655,6 +1717,35 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                           </div>
                         </div>
                       )}
+                      {activeInput.productType === "living_cabinet" && (
+                        <>
+                          <div>
+                            <div className="mb-2 text-xs font-black text-slate-500">하부 도어 구역</div>
+                            <div className="flex flex-wrap gap-2">
+                              {([{ id: 0.3, label: "낮게 (진열↑)" }, { id: 0.45, label: "기본" }, { id: 0.6, label: "높게 (수납↑)" }] as const).map((option) => {
+                                const current = Math.min(0.6, Math.max(0.3, activeInput.living_door_ratio ?? 0.45));
+                                const active = Math.abs(current - option.id) < 0.03;
+                                return (
+                                  <button key={option.id} type="button" onClick={() => updateActive("living_door_ratio", option.id)} className={`rounded-lg px-3 py-1.5 text-xs font-black ${active ? "bg-brand text-white" : "bg-soft text-slate-700"}`}>
+                                    {option.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <p className="mt-1.5 text-[11px] font-semibold text-slate-400">하부는 도어 수납, 상부는 오픈 진열로 나뉩니다.</p>
+                          </div>
+                          <div>
+                            <div className="mb-2 text-xs font-black text-slate-500">뒷판(백패널)</div>
+                            <div className="flex flex-wrap gap-2">
+                              {([{ id: true, label: "있음(막힘)" }, { id: false, label: "없음(벽 노출)" }] as const).map((option) => (
+                                <button key={String(option.id)} type="button" onClick={() => updateActive("back_panel", option.id)} className={`rounded-lg px-3 py-1.5 text-xs font-black ${(activeInput.back_panel !== false) === option.id ? "bg-brand text-white" : "bg-soft text-slate-700"}`}>
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
                       <div className="rounded-2xl bg-amber-50 p-3 text-[11px] leading-5 text-amber-900">
                         가능한 문짝 조합: {activeDoorOptions.length ? activeDoorOptions.map((count) => `${count}개`).join(", ") : "없음"}
                       </div>
@@ -1985,6 +2076,38 @@ function distributeKitchenTotalWidth(totalWidthMm: number, moduleCount: number) 
 }
 
 function getInitialInput(productType: ProductType): FurnitureInput {
+  if (productType === "desk") {
+    return {
+      ...defaultInput,
+      productType,
+      width_mm: 1400,
+      height_mm: 740,
+      depth_mm: 600,
+      has_door: false,
+      door_count: 0,
+      shelf_count: 1,
+      storage_drawer_count: 3,
+      material: "LPM 라이트오크",
+      color: "오크",
+      open_type: "오픈형",
+    };
+  }
+  if (productType === "living_cabinet") {
+    return {
+      ...defaultInput,
+      productType,
+      width_mm: 1800,
+      height_mm: 1800,
+      depth_mm: 400,
+      has_door: true,
+      door_count: 3,
+      shelf_count: 4,
+      material: "UV 하이그로시 그레이",
+      color: "그레이",
+      open_type: "여닫이",
+      wall_fix_option: true,
+    };
+  }
   if (productType === "kitchen_base_cabinet") {
     return {
       ...defaultInput,

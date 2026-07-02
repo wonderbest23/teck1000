@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { RoomAction, RoomCommandResult, RoomStateSummary } from "@/lib/roomCommands";
+import { parseSimpleRoomActions, type RoomAction, type RoomCommandResult, type RoomStateSummary } from "@/lib/roomCommands";
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 
@@ -41,7 +41,8 @@ export function RoomCommandChat({
         setMessages((m) => [...m, { role: "assistant", text: `오류: ${data.error}` }]);
       } else {
         setMessages((m) => [...m, { role: "assistant", text: data.reply || "완료했어요." }]);
-        if (data.actions?.length) onActions(data.actions);
+        const actions = data.actions?.length ? data.actions : parseSimpleRoomActions(message, stateRef.current);
+        if (actions.length) onActions(actions);
       }
     } catch {
       setMessages((m) => [...m, { role: "assistant", text: "연결에 실패했어요. 잠시 후 다시 시도해 주세요." }]);

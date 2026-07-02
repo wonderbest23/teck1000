@@ -14,6 +14,28 @@ export type ProductRules = {
 };
 
 export const productRules: Record<ProductType, ProductRules> = {
+  desk: {
+    label: "맞춤 책상",
+    minWidth: 900,
+    maxWidth: 2200,
+    minHeight: 680,
+    maxHeight: 1100,
+    minDepth: 450,
+    maxDepth: 900,
+    preferredDepthMm: 600,
+    allowsDoorless: true,
+  },
+  living_cabinet: {
+    label: "거실 인테리어장",
+    minWidth: 800,
+    maxWidth: 3000,
+    minHeight: 400,
+    maxHeight: 2400,
+    minDepth: 300,
+    maxDepth: 600,
+    preferredDepthMm: 400,
+    allowsDoorless: true,
+  },
   custom_shelf: {
     label: "맞춤 선반장",
     minWidth: 200,
@@ -105,6 +127,14 @@ export const productRules: Record<ProductType, ProductRules> = {
 export function getDoorCountOptions(productType: ProductType, widthMm: number, hasDoor: boolean) {
   if (!hasDoor && productRules[productType].allowsDoorless) return [0];
   if (widthMm < 250) return [];
+  if (productType === "desk") return [];
+
+  if (productType === "living_cabinet") {
+    if (widthMm < 900) return [2];
+    if (widthMm < 1500) return [2, 3];
+    if (widthMm < 2100) return [3, 4];
+    return [4, 5, 6];
+  }
 
   if (productType === "gap_cabinet") {
     return widthMm < 600 ? [1] : [2];

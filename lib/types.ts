@@ -1,4 +1,6 @@
 export type ProductType =
+  | "desk"
+  | "living_cabinet"
   | "custom_shelf"
   | "gap_cabinet"
   | "shoe_cabinet"
@@ -91,6 +93,8 @@ export type FurnitureInput = {
   microwave_module_index?: number;
   /** none | standard_100 */
   toe_kick_option?: string;
+  /** 거실 인테리어장 하부 도어 구역 비율(0.3~0.6). 나머지 상부는 오픈 진열. 기본 0.45 */
+  living_door_ratio?: number;
   /** flat | frame | slat */
   door_style?: "flat" | "frame" | "slat";
   /** pair | left | right | up | down | up_pair */

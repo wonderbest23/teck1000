@@ -59,9 +59,9 @@ function systemPrompt(state: RoomStateSummary) {
 
 [지원하는 동작]
 - add: 아래 목록의 상품만 방에 추가. 필요하면 같은 add에서 material/width_mm/height_mm/depth_mm/door_style을 함께 지정.
-- modify: '현재 선택된 가구'의 소재/치수/문디자인 변경.
-- rotate: 선택 가구 90° 회전.
-- remove: 선택 가구 삭제.
+- modify: '현재 선택된 가구'의 소재/치수/문디자인 변경. 선택이 없으면 id가 "current"인 현재 제작 중인 가구에 적용.
+- rotate: 선택 가구 90° 회전(선택 없으면 current).
+- remove: 선택 가구 삭제(current는 삭제 불가).
 - arrange: 전체 자동 정렬.
 
 [추가 가능한 상품(이 외에는 불가)]
@@ -77,9 +77,10 @@ ${itemsText}
 
 규칙:
 - 위 상품/소재/동작에 없는 것은 절대 만들지 말 것. 모르거나 불가능하면 actions를 비우고 reply로 "지원하지 않는다"고 짧게 안내.
-- "싱크대"="kitchen_full_set", "아일랜드"="kitchen_island", "선반"="custom_shelf", "신발장"="shoe_cabinet", "옷장/붙박이"="built_in_wardrobe", "틈새장"="gap_cabinet" 처럼 자연스러운 한국어를 매핑.
-- 치수는 mm 정수. "2.4m"=2400. 명시 없으면 기본값을 쓰게 두고 굳이 넣지 말 것.
-- modify/rotate/remove는 선택된 가구가 있어야 한다. 없으면 reply로 "먼저 가구를 선택하라"고 안내.
+- "책상"="desk", "거실장/인테리어장/TV장/장식장"="living_cabinet", "싱크대"="kitchen_full_set", "아일랜드"="kitchen_island", "선반"="custom_shelf", "신발장"="shoe_cabinet", "옷장/붙박이"="built_in_wardrobe", "틈새장"="gap_cabinet" 처럼 자연스러운 한국어를 매핑.
+- 치수는 mm 정수. "2.4m"=2400, "1.8m"=1800. "폭 1800", "1800으로 바꿔" → modify + width_mm: 1800.
+- 싱크대 세트(kitchen_full_set) 폭 변경도 modify + width_mm만 지정하면 된다(칸 배열은 앱이 맞춤).
+- modify/rotate/remove 대상: state.selectedId(없으면 current). current가 없으면 reply로 안내.
 - reply는 항상 한국어 1~2문장.`;
 }
 

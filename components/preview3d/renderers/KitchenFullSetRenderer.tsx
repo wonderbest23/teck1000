@@ -948,6 +948,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
     dragRatio,
     feedback,
     onSelectModule,
+    onDoubleClickModule,
     onSelectFixture,
     onPrepareDragModule,
     onPrepareDragItem,
@@ -1227,6 +1228,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
             onPrepareDragModule?.(index, "base", clientX, clientY);
           }}
           onSelectTarget={(target) => onSelectModule(index, "base", target)}
+          onDoubleClick={() => onDoubleClickModule?.(index, "base")}
         />
       );})}
       {interactive && modules.map((_, index) => {
@@ -1272,6 +1274,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
             onPrepareDragModule?.(index, "wall", clientX, clientY);
           }}
           onSelectTarget={(target) => onSelectModule(index, "wall", target)}
+          onDoubleClick={() => onDoubleClickModule?.(index, "wall")}
         />
       );})}
       {interactive && modules.map((_, index) => {

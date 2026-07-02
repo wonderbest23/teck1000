@@ -7,8 +7,12 @@ import { KitchenFullSetRenderer } from "./KitchenFullSetRenderer";
 import { WardrobeRenderer } from "./WardrobeRenderer";
 import { ShoeCabinetRenderer } from "./ShoeCabinetRenderer";
 import { ShelfRenderer } from "./ShelfRenderer";
+import { DeskRenderer } from "./DeskRenderer";
+import { LivingCabinetRenderer } from "./LivingCabinetRenderer";
 
 export const rendererRegistry = {
+  desk: DeskRenderer,
+  living_cabinet: LivingCabinetRenderer,
   kitchen_base_cabinet: KitchenBaseRenderer,
   kitchen_island: KitchenBaseRenderer,
   kitchen_wall_cabinet: KitchenWallRenderer,

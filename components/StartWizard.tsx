@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { CategoryArt, ProductArt } from "@/components/ProductArt";
 import { ManualCustomArt, TemplateFastArt } from "@/components/StartMethodArt";
-import { catalogCategories, getCategoryById, productLabels } from "@/lib/catalog";
-import { productTemplates } from "@/lib/data";
+import { productLabels } from "@/lib/catalog";
+import { getStartPreset, getStartPresetsByCategory, startPresetCategories, type StartPresetCategoryId } from "@/lib/startPresets";
 import { readRecentDesigns, removeRecentDesign, restoreToDraft, type DraftEntry } from "@/lib/quoteHistory";
-import type { ProductTemplate, ProductType } from "@/lib/types";
 
 type Method = "template" | "manual";
 type WizardStep = "method" | "category" | "product" | "manual";
@@ -17,8 +16,7 @@ export function StartWizard() {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>("method");
   const [method, setMethod] = useState<Method | null>(null);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [productSlug, setProductSlug] = useState<ProductType | null>(null);
+  const [categoryId, setCategoryId] = useState<StartPresetCategoryId | null>(null);
 
   const [manualTitle, setManualTitle] = useState("");
   const [manualWidth, setManualWidth] = useState("900");
@@ -30,14 +28,8 @@ export function StartWizard() {
     setRecent(readRecentDesigns());
   }, []);
 
-  const productMap = useMemo(() => new Map(productTemplates.map((product) => [product.slug, product])), []);
-  const category = categoryId ? getCategoryById(categoryId) : null;
-  const categoryProducts = useMemo(() => {
-    if (!category) return [] as ProductTemplate[];
-    return category.slugs
-      .map((slug) => productMap.get(slug))
-      .filter((product): product is ProductTemplate => Boolean(product));
-  }, [category, productMap]);
+  const category = categoryId ? startPresetCategories.find((item) => item.id === categoryId) ?? null : null;
+  const categoryPresets = getStartPresetsByCategory(categoryId);
 
   const totalSteps = method === "manual" ? 2 : 3;
   const currentStepIndex =
@@ -45,7 +37,6 @@ export function StartWizard() {
 
   function goBack() {
     if (step === "product") {
-      setProductSlug(null);
       setStep("category");
       return;
     }
@@ -67,9 +58,10 @@ export function StartWizard() {
     else startManualPreview(); // 폼 생략 — 바로 미리보기 화면에서 추가·수정
   }
 
-  function startTemplatePreview() {
-    if (!productSlug) return;
-    router.push(`/custom/${productSlug}?fresh=1`);
+  function startTemplatePreview(presetId: string) {
+    const preset = getStartPreset(presetId);
+    if (!preset) return;
+    router.push(`/custom/${preset.slug}?fresh=1&starter=${preset.id}`);
   }
 
   function resumeDesign(entry: DraftEntry) {
@@ -204,7 +196,7 @@ export function StartWizard() {
               <p className="mt-2 text-sm text-slate-500">만들 가구 종류를 선택하면 다음 단계에서 상품을 고릅니다.</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              {catalogCategories.map((item) => (
+              {startPresetCategories.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -236,40 +228,32 @@ export function StartWizard() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {categoryProducts.map((product) => {
-                const selected = productSlug === product.slug;
-                const label = productLabels[product.slug] ?? product.name;
+              {categoryPresets.map((preset) => {
+                const label = productLabels[preset.slug] ?? preset.label;
                 return (
                   <button
-                    key={product.slug}
+                    key={preset.id}
                     type="button"
-                    onClick={() => setProductSlug(product.slug as ProductType)}
-                    className={`overflow-hidden rounded-2xl bg-white text-left ring-2 transition ${
-                      selected ? "ring-brand" : "ring-slate-200"
-                    }`}
+                    onClick={() => startTemplatePreview(preset.id)}
+                    className="overflow-hidden rounded-2xl bg-white text-left ring-2 ring-slate-200 transition active:scale-[0.98]"
                   >
                     <div
                       className="flex aspect-square items-center justify-center"
                       style={{ backgroundColor: category.bg }}
                     >
-                      <ProductArt slug={product.slug as ProductType} className="h-[72%] w-[72%]" />
+                      <ProductArt slug={preset.slug} className="h-[72%] w-[72%]" />
                     </div>
                     <div className="p-3">
-                      <p className="text-xs font-black leading-tight text-ink">{label}</p>
+                      <p className="text-xs font-black leading-tight text-ink">{preset.label}</p>
+                      <p className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">{preset.hint}</p>
+                      <p className="mt-2 text-[10px] font-black text-brand">{label}로 시작</p>
                     </div>
                   </button>
                 );
               })}
             </div>
 
-            <button
-              type="button"
-              disabled={!productSlug}
-              onClick={startTemplatePreview}
-              className="w-full rounded-2xl bg-brand py-4 text-base font-black text-white shadow-lg shadow-brand/20 disabled:opacity-40"
-            >
-              3D 미리보기 시작
-            </button>
+            <p className="text-center text-xs font-bold text-slate-400">상품을 누르면 바로 3D 미리보기가 시작됩니다.</p>
           </div>
         )}
 

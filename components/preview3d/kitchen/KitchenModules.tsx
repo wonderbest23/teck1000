@@ -148,25 +148,27 @@ function AnimatedDrawerStack({
                 color={material.edge}
               />
             )}
-            <Trim
-              size={[width * 0.82, 0.012, depth * 0.42]}
-              position={[0, -faceHeight * 0.02, -depth * 0.2]}
-              color={lighten(material.color)}
-            />
-            {[-1, 1].map((side) => (
-              <Trim
-                key={`rail-${side}`}
-                size={[0.014, 0.014, depth * 0.46]}
-                position={[side * width * 0.41, -faceHeight * 0.02, -depth * 0.2]}
-                color="#94a3b8"
-              />
-            ))}
             {active && (
-              <Trim
-                size={[width * 0.82, 0.012, depth * 0.32]}
-                position={[0, -faceHeight * 0.02, -depth * 0.16]}
-                color={lighten(material.color)}
-              />
+              <>
+                <Trim
+                  size={[width * 0.82, 0.012, depth * 0.42]}
+                  position={[0, -faceHeight * 0.02, -depth * 0.2]}
+                  color={lighten(material.color)}
+                />
+                {[-1, 1].map((side) => (
+                  <Trim
+                    key={`rail-${side}`}
+                    size={[0.014, 0.014, depth * 0.46]}
+                    position={[side * width * 0.41, -faceHeight * 0.02, -depth * 0.2]}
+                    color="#94a3b8"
+                  />
+                ))}
+                <Trim
+                  size={[width * 0.82, 0.012, depth * 0.32]}
+                  position={[0, -faceHeight * 0.02, -depth * 0.16]}
+                  color={lighten(material.color)}
+                />
+              </>
             )}
           </group>
         );
@@ -199,8 +201,12 @@ function AnimatedOpenShelfCue({
 
   return (
     <group ref={ref} position={[0, height * 0.48, frontZ - 0.02]}>
-      <Trim size={[width * 0.9, 0.012, 0.012]} position={[0, height * 0.15, 0]} color={lighten(material.color)} />
-      <Trim size={[width * 0.9, 0.012, 0.012]} position={[0, -height * 0.15, 0]} color={lighten(material.color)} />
+      {active && (
+        <>
+          <Trim size={[width * 0.9, 0.012, 0.012]} position={[0, height * 0.15, 0]} color={lighten(material.color)} />
+          <Trim size={[width * 0.9, 0.012, 0.012]} position={[0, -height * 0.15, 0]} color={lighten(material.color)} />
+        </>
+      )}
     </group>
   );
 }
@@ -331,13 +337,14 @@ function PulloutLarder({ width, height, depth, material, active, showHandles }: 
     <group ref={ref} position={[0, 0, frontZ]}>
       <Panel size={[width * 0.92, height - 0.02, 0.02]} position={[0, height / 2, 0]} color={material.color} edge={material.edge} />
       {showHandles && <Trim size={[0.02, height * 0.5, 0.03]} position={[width * 0.4, height / 2, 0.03]} color={material.edge} />}
-      {baskets.map((fy, i) => (
-        <group key={i} position={[0, height * fy, -depth * 0.34]}>
-          <Trim size={[width * 0.74, 0.05, 0.012]} position={[0, -0.025, 0.16]} color="#c7ced6" />
-          <Trim size={[width * 0.74, 0.05, 0.012]} position={[0, -0.025, -0.16]} color="#c7ced6" />
-          <Trim size={[width * 0.74, 0.012, 0.32]} position={[0, -0.05, 0]} color={APPLIANCE_METAL} />
-        </group>
-      ))}
+      {active &&
+        baskets.map((fy, i) => (
+          <group key={i} position={[0, height * fy, -depth * 0.34]}>
+            <Trim size={[width * 0.74, 0.05, 0.012]} position={[0, -0.025, 0.16]} color="#c7ced6" />
+            <Trim size={[width * 0.74, 0.05, 0.012]} position={[0, -0.025, -0.16]} color="#c7ced6" />
+            <Trim size={[width * 0.74, 0.012, 0.32]} position={[0, -0.05, 0]} color={APPLIANCE_METAL} />
+          </group>
+        ))}
     </group>
   );
 }
@@ -504,6 +511,7 @@ export function KitchenBaseModule({
   onSelectTarget,
   onDrawerCountChange,
   onShelfCountChange,
+  onDoubleClick,
   onEditStart,
   onEditEnd,
 }: {
@@ -531,6 +539,7 @@ export function KitchenBaseModule({
   onSelectTarget?: (target: PreviewEditTarget) => void;
   onDrawerCountChange?: (drawerCount: number) => void;
   onShelfCountChange?: (shelfCount: number) => void;
+  onDoubleClick?: () => void;
   onEditStart?: () => void;
   onEditEnd?: () => void;
 }) {
@@ -540,8 +549,8 @@ export function KitchenBaseModule({
   const showInterior = shouldShowInteriorHints(viewMode) || selected;
   const handleHitboxCount = Math.min(Math.max(resolvedDoorCount, 0), 2);
   const animateOpen = selected && !dragging && selectedTarget === "module";
-  // 문열기 모드 — 문짝뿐 아니라 서랍·풀아웃·오픈장도 함께 열어 내부를 보여준다
-  const openAll = animateOpen || viewMode === "doors_open";
+  // 문열기 모드에서만 서랍·풀아웃 내부(레일·통)를 보여준다 — 닫힌 상태는 전면판만
+  const openAll = viewMode === "doors_open";
 
   return (
     <group position={[x, y, 0]}>
@@ -621,6 +630,10 @@ export function KitchenBaseModule({
             event.stopPropagation();
             onSelectTarget?.("module");
           }}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            onDoubleClick?.();
+          }}
           onPointerUp={
             onPointerDown
               ? (event) => {
@@ -687,6 +700,7 @@ export function KitchenWallModule({
   onPointerDown,
   onSelectTarget,
   onShelfCountChange,
+  onDoubleClick,
   onEditStart,
   onEditEnd,
 }: {
@@ -709,11 +723,13 @@ export function KitchenWallModule({
   onPointerDown?: (clientX: number, clientY: number) => void;
   onSelectTarget?: (target: PreviewEditTarget) => void;
   onShelfCountChange?: (shelfCount: number) => void;
+  onDoubleClick?: () => void;
   onEditStart?: () => void;
   onEditEnd?: () => void;
 }) {
   const t = 0.016;
   const innerWidth = Math.max(width - t * 2, 0.04);
+  const shelfPositionsY = Array.from({ length: Math.max(0, shelfCount) }).map((_, index) => t + ((height - t * 2) * (index + 1)) / (Math.max(0, shelfCount) + 1));
 
   return (
     <group position={[x, y, 0]}>
@@ -727,7 +743,7 @@ export function KitchenWallModule({
         <Panel
           key={`wall-shelf-${index}`}
           size={[innerWidth, t, depth * 0.9]}
-          position={[0, t + ((height - t * 2) * (index + 1)) / (Math.max(0, shelfCount) + 1), 0.01]}
+          position={[0, shelfPositionsY[index], 0.01]}
           color={CARCASS_FINISH.color}
           edge={CARCASS_FINISH.edge}
           carcass
@@ -756,6 +772,7 @@ export function KitchenWallModule({
           viewMode={viewMode}
           doorSwing={doorSwing}
           animatedOpen={selected && !dragging && selectedTarget === "module"}
+          shelfPositionsY={shelfPositionsY}
         />
       )}
       {interactive && (onPointerDown || onSelectTarget) && (
@@ -772,6 +789,10 @@ export function KitchenWallModule({
           onClick={(event) => {
             event.stopPropagation();
             onSelectTarget?.("module");
+          }}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            onDoubleClick?.();
           }}
           onPointerUp={
             onPointerDown

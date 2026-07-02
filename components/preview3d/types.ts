@@ -56,6 +56,7 @@ export type PreviewRendererProps = {
   dragRatio: number | null;
   feedback?: PreviewFeedback;
   onSelectModule: (index: number, part: KitchenModulePart, target?: PreviewEditTarget) => void;
+  onDoubleClickModule?: (index: number, part: KitchenModulePart) => void;
   onSelectFixture?: (fixture: KitchenFixtureTarget, index: number) => void;
   onPrepareDragModule?: (index: number, part: KitchenModulePart, clientX: number, clientY: number) => void;
   onPrepareDragItem?: (itemKey: KitchenMovableKey, moduleIndex: number, clientX: number, clientY: number) => void;

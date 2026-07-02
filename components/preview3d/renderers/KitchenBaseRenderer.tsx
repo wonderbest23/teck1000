@@ -29,6 +29,7 @@ export function KitchenBaseRenderer(props: PreviewRendererProps) {
     selectedEditTarget = "module",
     interactive = false,
     onSelectModule,
+    onDoubleClickModule,
     onPrepareDragModule,
     onDrawerCountChange,
     onShelfCountChange,
@@ -85,6 +86,7 @@ export function KitchenBaseRenderer(props: PreviewRendererProps) {
         onEditEnd={onEditEnd}
         onPointerDown={(clientX, clientY) => onPrepareDragModule?.(0, "base", clientX, clientY)}
         onSelectTarget={(target) => onSelectModule(0, "base", target)}
+        onDoubleClick={() => onDoubleClickModule?.(0, "base")}
       />
       {showCountertop && <CountertopTrim width={w} y={topY} depth={depth} countertopId={countertop.id} />}
       {showCountertop && sink.id !== "none" && (

@@ -142,6 +142,10 @@ export function getBoxFrame(input: FurnitureInput): SceneFrame {
 
 export function getSceneFrame(input: FurnitureInput): SceneFrame {
   switch (input.productType) {
+    case "desk":
+      return getBoxFrame(input);
+    case "living_cabinet":
+      return getBoxFrame(input);
     case "kitchen_base_cabinet":
       return getKitchenBaseFrame(input);
     case "kitchen_wall_cabinet":

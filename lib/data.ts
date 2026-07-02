@@ -4,6 +4,24 @@ import type { FurnitureInput, Order, OrderStatus, ProductTemplate } from "@/lib/
 
 export const productTemplates: ProductTemplate[] = [
   {
+    slug: "desk",
+    name: "맞춤 책상",
+    description: "책상 높이 기준으로 상판/다리/서랍 조합을 맞추는 홈오피스 기본 데스크입니다.",
+    imageHint: "홈오피스 데스크",
+    imageSrc: "/images/custom-shelf.svg",
+    minWidth: 900,
+    maxWidth: 2200,
+  },
+  {
+    slug: "living_cabinet",
+    name: "거실 인테리어장",
+    description: "하부 도어 수납 + 상부 오픈 진열을 조합하는 거실 벽면 인테리어장(TV장·장식장)입니다.",
+    imageHint: "거실 인테리어장",
+    imageSrc: "/images/custom-shelf.svg",
+    minWidth: 800,
+    maxWidth: 3000,
+  },
+  {
     slug: "custom_shelf",
     name: "맞춤 선반장",
     description: "도면 없이 사이즈와 선반 개수만 입력하는 기본 수납 선반장입니다.",
@@ -130,6 +148,8 @@ export function getProduct(slug: string) {
 }
 
 const sampleInputs: FurnitureInput[] = [
+  { ...defaultInput, productType: "desk", width_mm: 1400, height_mm: 740, depth_mm: 600, has_door: false, door_count: 0, shelf_count: 1, storage_drawer_count: 3, material: "LPM 라이트오크", color: "오크" },
+  { ...defaultInput, productType: "living_cabinet", width_mm: 1800, height_mm: 1800, depth_mm: 400, has_door: true, door_count: 3, shelf_count: 4, color: "그레이", material: "UV 하이그로시 그레이" },
   { ...defaultInput, productType: "gap_cabinet", width_mm: 420, height_mm: 1900, depth_mm: 280, has_door: true, door_count: 1, shelf_count: 5, wall_fix_option: true },
   { ...defaultInput, productType: "shoe_cabinet", width_mm: 900, height_mm: 2100, depth_mm: 350, has_door: true, door_count: 2, shelf_count: 4, color: "오크", material: "LPM 라이트오크" },
   { ...defaultInput, productType: "custom_shelf", width_mm: 720, height_mm: 1400, depth_mm: 320, shelf_count: 4 },
@@ -145,13 +165,13 @@ export const sampleOrders: Order[] = sampleInputs.map((input, index) => {
   return {
     id: `sample-${index + 1}`,
     order_number: `20260621-000${index + 1}`,
-    customer_name: ["김민지", "박준호", "이서연", "최하준", "정다은", "한서준", "윤지호"][index],
+    customer_name: ["김민지", "박준호", "이서연", "최하준", "정다은", "한서준", "윤지호", "강하늘", "오지원"][index],
     phone: "010-1234-5678",
     email: "customer@example.com",
     shipping_address: "서울시 강남구 테헤란로 100",
     request_memo: index === 0 ? "벽면 고정 가능 여부 확인 부탁드립니다." : "배송 전 연락 주세요.",
     product_name: product.name,
-    status: ["reviewing", "cutting_wait", "submitted", "confirmed", "reviewing", "confirmed", "submitted"][index] as OrderStatus,
+    status: ["reviewing", "cutting_wait", "submitted", "confirmed", "reviewing", "confirmed", "submitted", "reviewing", "submitted"][index] as OrderStatus,
     total_price: quote.finalPrice,
     input,
     quote,

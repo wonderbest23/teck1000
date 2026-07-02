@@ -20,6 +20,37 @@ const MIN_LEAD_DAYS = 7;
 const MIN_INSTALL_GAP_DAYS = 1;
 
 export function createDefaultInput(productType: ProductType): FurnitureInput {
+  if (productType === "desk") {
+    return normalizeFurnitureInput({
+      ...defaultInput,
+      productType,
+      width_mm: 1400,
+      height_mm: 740,
+      depth_mm: 600,
+      has_door: false,
+      door_count: 0,
+      shelf_count: 1,
+      storage_drawer_count: 3,
+      material: "LPM 라이트오크",
+      color: "오크",
+      open_type: "오픈형",
+    });
+  }
+  if (productType === "living_cabinet") {
+    return normalizeFurnitureInput({
+      ...defaultInput,
+      productType,
+      width_mm: 1800,
+      height_mm: 1800,
+      depth_mm: 400,
+      has_door: true,
+      door_count: 3,
+      shelf_count: 4,
+      material: "UV 하이그로시 그레이",
+      color: "그레이",
+      wall_fix_option: true,
+    });
+  }
   if (productType === "kitchen_base_cabinet") {
     return normalizeFurnitureInput({ ...defaultInput, productType, width_mm: 900, height_mm: KITCHEN_STANDARDS.baseHeightMm, depth_mm: KITCHEN_STANDARDS.baseDepthMm, has_door: true, door_count: 3, shelf_count: 1, material: "UV 하이그로시 화이트", color: "화이트" });
   }

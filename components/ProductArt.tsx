@@ -5,14 +5,18 @@ type ArtProps = { className?: string };
 
 export function CategoryArt({ id, className = "" }: { id: string; className?: string }) {
   if (id === "kitchen") return <KitchenCategoryArt className={className} />;
+  if (id === "office") return <OfficeCategoryArt className={className} />;
+  if (id === "living") return <LivingCategoryArt className={className} />;
   if (id === "storage") return <StorageCategoryArt className={className} />;
   if (id === "entrance") return <EntranceCategoryArt className={className} />;
   if (id === "wardrobe") return <WardrobeCategoryArt className={className} />;
-  return null;
+  return <StorageCategoryArt className={className} />;
 }
 
 export function ProductArt({ slug, className = "" }: { slug: ProductType; className?: string }) {
   const map: Record<ProductType, (p: ArtProps) => JSX.Element> = {
+    desk: DeskArt,
+    living_cabinet: LivingCabinetArt,
     kitchen_full_set: KitchenFullSetArt,
     kitchen_base_cabinet: KitchenBaseArt,
     kitchen_island: KitchenIslandArt,
@@ -24,6 +28,38 @@ export function ProductArt({ slug, className = "" }: { slug: ProductType; classN
   };
   const Component = map[slug];
   return <Component className={className} />;
+}
+
+function DeskArt({ className }: ArtProps) {
+  return (
+    <svg viewBox="0 0 200 140" className={className} aria-hidden>
+      <rect x="22" y="40" width="156" height="16" rx="4" fill="#e2e8f0" />
+      <rect x="28" y="56" width="20" height="58" rx="4" fill="#ffffff" stroke="#4f46e5" strokeWidth="3" />
+      <rect x="152" y="56" width="20" height="58" rx="4" fill="#ffffff" stroke="#4f46e5" strokeWidth="3" />
+      <rect x="62" y="60" width="62" height="42" rx="5" fill="#ffffff" stroke="#4f46e5" strokeWidth="3" />
+      <path d="M68 74h50M68 84h50" stroke="#c7d2fe" strokeWidth="2.5" />
+      <circle cx="92" cy="95" r="2.8" fill="#4f46e5" />
+      <ellipse cx="100" cy="122" rx="66" ry="7" fill="#0f172a" opacity=".08" />
+    </svg>
+  );
+}
+
+function LivingCabinetArt({ className }: ArtProps) {
+  return (
+    <svg viewBox="0 0 200 140" className={className} aria-hidden>
+      <rect x="34" y="12" width="132" height="112" rx="6" fill="#fff" stroke="#0f766e" strokeWidth="3" />
+      {/* 상부 오픈 진열 */}
+      <path d="M40 44h120M40 70h120" stroke="#5eead4" strokeWidth="2.5" />
+      <rect x="52" y="20" width="26" height="18" rx="2" fill="#99f6e4" />
+      <rect x="120" y="48" width="30" height="18" rx="2" fill="#5eead4" />
+      {/* 하부 도어 구역 */}
+      <path d="M34 84h132" stroke="#0f766e" strokeWidth="3" />
+      <path d="M100 84v40" stroke="#94a3b8" strokeWidth="2" />
+      <circle cx="92" cy="104" r="3" fill="#0f766e" />
+      <circle cx="108" cy="104" r="3" fill="#0f766e" />
+      <ellipse cx="100" cy="128" rx="60" ry="7" fill="#0f172a" opacity=".08" />
+    </svg>
+  );
 }
 
 function KitchenCategoryArt({ className }: ArtProps) {
@@ -44,6 +80,30 @@ function StorageCategoryArt({ className }: ArtProps) {
       <path d="M62 52h98M62 82h98M62 112h98" stroke="#b45309" strokeWidth="3" strokeLinecap="round" />
       <rect x="194" y="28" width="54" height="96" rx="8" fill="#fff" stroke="#b45309" strokeWidth="3" />
       <path d="M206 36v80M236 36v80" stroke="#94a3b8" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function OfficeCategoryArt({ className }: ArtProps) {
+  return (
+    <svg viewBox="0 0 360 144" className={className} preserveAspectRatio="xMidYMid slice" aria-hidden>
+      <rect x="52" y="84" width="208" height="14" rx="4" fill="#334155" opacity=".85" />
+      <rect x="66" y="44" width="130" height="40" rx="7" fill="#ffffff" stroke="#4f46e5" strokeWidth="3" />
+      <rect x="208" y="26" width="56" height="58" rx="8" fill="#ffffff" stroke="#4f46e5" strokeWidth="3" />
+      <path d="M82 58h98M82 70h98" stroke="#c7d2fe" strokeWidth="3" />
+      <circle cx="236" cy="55" r="6" fill="#4f46e5" />
+    </svg>
+  );
+}
+
+function LivingCategoryArt({ className }: ArtProps) {
+  return (
+    <svg viewBox="0 0 360 144" className={className} preserveAspectRatio="xMidYMid slice" aria-hidden>
+      <rect x="48" y="88" width="264" height="12" rx="4" fill="#475569" opacity=".8" />
+      <rect x="70" y="54" width="170" height="34" rx="8" fill="#ffffff" stroke="#0f766e" strokeWidth="3" />
+      <rect x="252" y="28" width="42" height="60" rx="6" fill="#ffffff" stroke="#0f766e" strokeWidth="3" />
+      <path d="M86 70h138M86 80h138" stroke="#99f6e4" strokeWidth="2.5" />
+      <circle cx="273" cy="55" r="5" fill="#0f766e" />
     </svg>
   );
 }

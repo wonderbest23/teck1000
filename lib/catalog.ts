@@ -19,6 +19,22 @@ export const catalogCategories: CatalogCategory[] = [
     slugs: ["kitchen_full_set", "kitchen_base_cabinet", "kitchen_wall_cabinet", "kitchen_island"],
   },
   {
+    id: "office",
+    title: "홈오피스 가구",
+    subtitle: "책상 · 사이드장",
+    accent: "#4f46e5",
+    bg: "#eef2ff",
+    slugs: ["desk", "gap_cabinet"],
+  },
+  {
+    id: "living",
+    title: "거실 가구",
+    subtitle: "인테리어장 · TV장 · 장식장",
+    accent: "#0f766e",
+    bg: "#f0fdfa",
+    slugs: ["living_cabinet", "custom_shelf"],
+  },
+  {
     id: "storage",
     title: "수납 가구",
     subtitle: "선반 · 틈새장",
@@ -45,6 +61,8 @@ export const catalogCategories: CatalogCategory[] = [
 ];
 
 export const productLabels: Partial<Record<ProductType, string>> = {
+  desk: "맞춤 책상",
+  living_cabinet: "거실 인테리어장",
   kitchen_full_set: "상하부장 세트",
   kitchen_base_cabinet: "싱크대 하부장",
   kitchen_wall_cabinet: "싱크대 상부장",
@@ -58,6 +76,16 @@ export const productLabels: Partial<Record<ProductType, string>> = {
 /** 내 공간에 추가할 때 한 번 더 고르는 표준 규격(폭 기준). 없는 제품은 기본값으로 바로 추가. */
 export type RoomAddPreset = { label: string; width_mm: number; height_mm: number; depth_mm: number };
 export const roomAddPresets: Partial<Record<ProductType, RoomAddPreset[]>> = {
+  desk: [
+    { label: "1200", width_mm: 1200, height_mm: 740, depth_mm: 600 },
+    { label: "1400", width_mm: 1400, height_mm: 740, depth_mm: 600 },
+    { label: "1600", width_mm: 1600, height_mm: 740, depth_mm: 700 },
+  ],
+  living_cabinet: [
+    { label: "TV장 1800", width_mm: 1800, height_mm: 500, depth_mm: 400 },
+    { label: "벽장 1800", width_mm: 1800, height_mm: 1800, depth_mm: 400 },
+    { label: "벽장 2400", width_mm: 2400, height_mm: 2200, depth_mm: 400 },
+  ],
   kitchen_base_cabinet: [
     { label: "600", width_mm: 600, height_mm: 850, depth_mm: 600 },
     { label: "900", width_mm: 900, height_mm: 850, depth_mm: 600 },
@@ -95,6 +123,8 @@ export const roomAddPresets: Partial<Record<ProductType, RoomAddPreset[]>> = {
 
 /** 홈 카드용 시작 예상가(원) — "예상가 ~" 표기 */
 export const productFromPrice: Partial<Record<ProductType, number>> = {
+  desk: 540000,
+  living_cabinet: 880000,
   kitchen_full_set: 1120000,
   kitchen_island: 1480000,
   kitchen_base_cabinet: 380000,
@@ -106,7 +136,7 @@ export const productFromPrice: Partial<Record<ProductType, number>> = {
 };
 
 /** 홈 '맞춤 제작 상품'에 강조 노출할 상품 */
-export const featuredSlugs: ProductType[] = ["kitchen_full_set", "kitchen_island", "custom_shelf", "shoe_cabinet"];
+export const featuredSlugs: ProductType[] = ["kitchen_full_set", "desk", "kitchen_island", "shoe_cabinet"];
 
 export function getCategoryById(id: string) {
   return catalogCategories.find((category) => category.id === id);

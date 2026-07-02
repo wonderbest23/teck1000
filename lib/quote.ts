@@ -118,6 +118,47 @@ function storageDoorParts(input: FurnitureInput): Part[] {
   return doorParts({ ...input, height_mm: doorHeight + 4 });
 }
 
+function deskParts(input: FurnitureInput): Part[] {
+  const topThickness = BOARD_THICKNESS_MM;
+  const legHeight = Math.max(input.height_mm - topThickness, 1);
+  const apronHeight = 180;
+  const innerWidth = Math.max(input.width_mm - BOARD_THICKNESS_MM * 2, 1);
+  const legDepth = Math.max(input.depth_mm - 60, 1);
+  const shelfDepth = Math.max(input.depth_mm - 120, 1);
+  return [
+    { name: "책상 상판", width_mm: input.width_mm, height_mm: input.depth_mm, quantity: 1, material: input.material, color: input.color, note: "데스크 상판 / 전면 라운딩 마감 가능" },
+    { name: "책상 좌측 다리판", width_mm: legHeight, height_mm: legDepth, quantity: 1, material: input.material, color: input.color },
+    { name: "책상 우측 다리판", width_mm: legHeight, height_mm: legDepth, quantity: 1, material: input.material, color: input.color },
+    { name: "책상 전면 가림판", width_mm: innerWidth, height_mm: apronHeight, quantity: 1, material: input.material, color: input.color, note: "상판 하부 보강" },
+    { name: "책상 하부 보강대", width_mm: innerWidth, height_mm: 90, quantity: 1, material: input.material, color: input.color, note: "처짐 방지 보강" },
+    { name: "책상 보조 선반", width_mm: innerWidth, height_mm: shelfDepth, quantity: Math.max(0, Math.floor(input.shelf_count ?? 0)), material: input.material, color: input.color, note: "상판 하부 선택 선반" },
+  ];
+}
+
+/** 거실 인테리어장 — 하부 도어존 + 상부 오픈 진열. 3D(LivingCabinetRenderer)와 동일한 구획으로 산정. */
+function livingCabinetParts(input: FurnitureInput): Part[] {
+  const hasBack = input.back_panel !== false;
+  const body = bodyParts(input, "오픈 진열 선반", hasBack);
+  if (!input.has_door || input.door_count <= 0) return body;
+  const ratio = Math.min(0.6, Math.max(0.3, input.living_door_ratio ?? 0.45));
+  const doorZoneMm = Math.min(Math.round(input.height_mm * ratio), 900);
+  const innerWidth = Math.max(input.width_mm - BOARD_THICKNESS_MM * 2, 1);
+  const divider: Part = {
+    name: "구획 선반",
+    width_mm: innerWidth,
+    height_mm: input.depth_mm,
+    quantity: 1,
+    material: input.material,
+    color: input.color,
+    note: "도어존/오픈존 구획 고정선반",
+  };
+  const doors = doorParts({ ...input, height_mm: doorZoneMm + 4 }).map((part) => ({
+    ...part,
+    note: `${part.note ?? ""} · 하부 도어존 ${doorZoneMm}mm`.trim(),
+  }));
+  return [...body, divider, ...doors];
+}
+
 function prefixParts(parts: Part[], prefix: string): Part[] {
   return parts.map((part) => ({ ...part, name: `${prefix} ${part.name}` }));
 }
@@ -130,6 +171,14 @@ function moduleBodyParts(input: FurnitureInput, widthMm: number, heightMm: numbe
 }
 
 export function generateParts(productType: ProductType, input: FurnitureInput): Part[] {
+  if (productType === "desk") {
+    return [...deskParts(input), ...storageDrawerParts(input)];
+  }
+
+  if (productType === "living_cabinet") {
+    return livingCabinetParts(input);
+  }
+
   if (productType === "custom_shelf") {
     // 문짝(여닫이/슬라이딩)·하단 서랍도 부품에 포함 — 미리보기에 보이면 부품표에도 있어야 한다(허상 없음)
     return [...bodyParts(input, "선반", Boolean(input.back_panel)), ...storageDoorParts(input), ...storageDrawerParts(input)];
@@ -463,7 +512,7 @@ export function generateHardwareList(productType: ProductType, input: FurnitureI
   }
 
   // 수납장(선반/틈새/신발장) 하단 서랍 레일 + 슬라이딩 도어 철물
-  if (productType === "custom_shelf" || productType === "gap_cabinet" || productType === "shoe_cabinet") {
+  if (productType === "custom_shelf" || productType === "gap_cabinet" || productType === "shoe_cabinet" || productType === "living_cabinet") {
     const storageDrawers = Math.min(4, Math.max(0, Math.round(input.storage_drawer_count ?? 0)));
     if (storageDrawers > 0) {
       tasks.push({ hardware_name: "서랍 레일", spec: input.drawer_box_spec === "birch12" ? "볼레일 (자작 서랍통)" : "볼레일", quantity: storageDrawers, unit: "조", note: "서랍 1단당 1조" });
@@ -530,6 +579,11 @@ export function generateHardwareList(productType: ProductType, input: FurnitureI
 
   if (productType === "shoe_cabinet" && (input.bottom_space ?? 0) > 0) {
     tasks.push({ hardware_name: "조절 다리", spec: `H${input.bottom_space}`, quantity: 4, unit: "개", note: "하부 띄움 받침" });
+  }
+
+  if (productType === "desk") {
+    tasks.push({ hardware_name: "상판 고정 브라켓", spec: "L형", quantity: 4, unit: "개", note: "상판 체결 보강" });
+    tasks.push({ hardware_name: "케이블 캡", spec: "60mm", quantity: input.width_mm >= 1400 ? 2 : 1, unit: "개", note: "배선 홀 마감" });
   }
 
   return tasks;
@@ -614,6 +668,12 @@ export function generateWarnings(productType: ProductType, input: FurnitureInput
     }
   }
   if (productType === "built_in_wardrobe" && input.width_mm >= 2100 && input.door_count < 5) warnings.push({ type: "info", message: "폭이 넓은 붙박이장은 5개 이상 문짝 구성이 사용성과 하중 분산에 유리합니다." });
+  if (productType === "desk" && input.width_mm >= 1800 && (input.storage_drawer_count ?? 0) === 0) {
+    warnings.push({ type: "info", message: "폭 1800mm 이상 책상은 처짐 방지를 위해 보강대/사이드 수납 추가를 권장합니다." });
+  }
+  if (productType === "living_cabinet" && input.height_mm >= 1800 && !input.wall_fix_option) {
+    warnings.push({ type: "warning", message: "높이 1800mm 이상 인테리어장은 전도 방지를 위해 벽고정을 권장합니다." });
+  }
 
   return warnings;
 }

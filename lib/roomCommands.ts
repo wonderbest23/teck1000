@@ -7,6 +7,8 @@ import type { ProductType } from "@/lib/types";
  * 추가 가능한 상품/소재/문스타일/동작은 모두 아래 기존 자산에서만 나온다.
  */
 export const ADDABLE_PRODUCT_TYPES: ProductType[] = [
+  "desk",
+  "living_cabinet",
   "kitchen_full_set",
   "kitchen_base_cabinet",
   "kitchen_wall_cabinet",
@@ -42,3 +44,22 @@ export type RoomStateSummary = {
 
 export const PRODUCT_LABEL_LINES = ADDABLE_PRODUCT_TYPES.map((p) => `- ${p}: ${productLabels[p] ?? p}`).join("\n");
 export const MATERIAL_LINES = materials.map((m) => `- ${m.name} (${m.color})`).join("\n");
+
+/** AI가 actions를 비워 보낸 경우 — "폭 1800", "1800으로" 같은 단순 치수 명령을 로컬에서 보정 */
+export function parseSimpleRoomActions(message: string, state: RoomStateSummary): RoomAction[] {
+  const targetId = state.selectedId ?? state.items[0]?.id ?? null;
+  if (!targetId) return [];
+  const text = message.trim();
+  const widthMatch = text.match(/(?:폭|가로|너비|width)[^\d]{0,6}(\d{3,4})|(\d{3,4})\s*(?:mm|㎜)?\s*(?:폭|가로)?\s*(?:으로|로)\s*(?:바꿔|변경|해|맞춰)/i);
+  const heightMatch = text.match(/(?:높이|height)[^\d]{0,6}(\d{3,4})/i);
+  const depthMatch = text.match(/(?:깊이|depth)[^\d]{0,6}(\d{3,4})/i);
+  const width_mm = Number(widthMatch?.[1] ?? widthMatch?.[2]);
+  const height_mm = heightMatch?.[1] ? Number(heightMatch[1]) : undefined;
+  const depth_mm = depthMatch?.[1] ? Number(depthMatch[1]) : undefined;
+  if (!Number.isFinite(width_mm) && height_mm == null && depth_mm == null) return [];
+  const action: RoomAction = { type: "modify" };
+  if (Number.isFinite(width_mm) && width_mm > 0) action.width_mm = width_mm;
+  if (height_mm != null && Number.isFinite(height_mm)) action.height_mm = height_mm;
+  if (depth_mm != null && Number.isFinite(depth_mm)) action.depth_mm = depth_mm;
+  return [action];
+}

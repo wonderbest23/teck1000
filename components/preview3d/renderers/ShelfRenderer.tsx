@@ -1,101 +1,12 @@
 "use client";
 
-import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
-import type { Group } from "three";
 import { BOARD_THICKNESS_M } from "@/components/preview3d/constants";
-import { Doors, Panel, PreviewRoom, SlidingDoors, Trim, WoodGrain } from "@/components/preview3d/primitives";
+import { Doors, Panel, PreviewRoom, SlidingDoors, WoodGrain } from "@/components/preview3d/primitives";
 import { getMaterialPreset, lighten, materialPresets } from "@/components/preview3d/materials";
 import { StorageEditLayer, getStorageDimensionLimits } from "@/components/preview3d/controls/StorageSceneControls";
 import { BoxDimensions } from "@/components/preview3d/primitives/DimensionMarkers";
-import type { MaterialColors, PreviewRendererProps } from "@/components/preview3d/types";
-
-/** 하단 서랍 스택 — 문열림/선택 시 순차 슬라이드로 열린다 (주방 서랍과 동일한 감각) */
-function StorageDrawers({
-  width,
-  bottomY,
-  zoneHeight,
-  depth,
-  count,
-  material,
-  open,
-  showHandles,
-}: {
-  width: number;
-  bottomY: number;
-  zoneHeight: number;
-  depth: number;
-  count: number;
-  material: MaterialColors;
-  open: boolean;
-  showHandles: boolean;
-}) {
-  const refs = useRef<Array<Group | null>>([]);
-  const gap = 0.01;
-  const frontZ = depth / 2 + 0.012;
-  const faceHeight = Math.max((zoneHeight - gap * (count + 1)) / count, 0.06);
-  const boxDepth = Math.max(depth * 0.5, 0.16);
-  const boxWidth = Math.max(width * 0.82, 0.12);
-  const sideH = Math.max(faceHeight * 0.55, 0.045);
-
-  useFrame((_, delta) => {
-    refs.current.forEach((group, index) => {
-      if (!group) return;
-      const stagger = count <= 1 ? 1 : 1 - index * 0.14;
-      const target = open ? depth * 0.24 * Math.max(0.55, stagger) : 0;
-      group.position.z += (frontZ + target - group.position.z) * Math.min(1, delta * 8);
-    });
-  });
-
-  return (
-    <group position={[0, bottomY, 0]}>
-      {Array.from({ length: count }).map((_, index) => {
-        const y = zoneHeight - gap - faceHeight / 2 - index * (faceHeight + gap);
-        return (
-          <group key={`storage-rail-${index}`} position={[0, y - faceHeight * 0.08, 0]}>
-            {[-1, 1].map((side) => (
-              <Trim
-                key={`storage-rail-${index}-${side}`}
-                size={[0.018, 0.018, depth * 0.62]}
-                position={[side * width * 0.47, 0, -depth * 0.04]}
-                color="#94a3b8"
-              />
-            ))}
-          </group>
-        );
-      })}
-      {Array.from({ length: count }).map((_, index) => {
-        const y = zoneHeight - gap - faceHeight / 2 - index * (faceHeight + gap);
-        return (
-          <group
-            key={`storage-drawer-${index}`}
-            ref={(node) => {
-              refs.current[index] = node;
-            }}
-            position={[0, y, frontZ]}
-          >
-            <Panel size={[width * 0.96, faceHeight, 0.018]} position={[0, 0, 0]} color={material.color} edge={material.edge} />
-            <Panel size={[boxWidth, 0.012, boxDepth]} position={[0, -faceHeight * 0.2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
-            <Panel size={[0.014, sideH, boxDepth]} position={[-boxWidth / 2, -faceHeight * 0.2 + sideH / 2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
-            <Panel size={[0.014, sideH, boxDepth]} position={[boxWidth / 2, -faceHeight * 0.2 + sideH / 2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
-            <Panel size={[boxWidth, sideH, 0.014]} position={[0, -faceHeight * 0.2 + sideH / 2, -boxDepth]} color={lighten(material.color)} edge={material.edge} />
-            {[-1, 1].map((side) => (
-              <Trim
-                key={`moving-rail-${index}-${side}`}
-                size={[0.012, 0.014, boxDepth * 0.9]}
-                position={[side * (boxWidth / 2 + 0.012), -faceHeight * 0.05, -boxDepth / 2]}
-                color="#64748b"
-              />
-            ))}
-            {showHandles && (
-              <Trim size={[width * 0.4, 0.016, 0.024]} position={[0, -faceHeight * 0.22, 0.022]} color={material.edge} />
-            )}
-          </group>
-        );
-      })}
-    </group>
-  );
-}
+import { StorageDrawers } from "@/components/preview3d/renderers/StorageDrawers";
+import type { PreviewRendererProps } from "@/components/preview3d/types";
 
 export function ShelfRenderer({
   input,
@@ -127,8 +38,13 @@ export function ShelfRenderer({
   const drawerCount = Math.min(4, Math.max(0, Math.round(input.storage_drawer_count ?? 0)));
   const drawerZone = drawerCount > 0 ? Math.min(h * 0.55, drawerCount * 0.2 + t) : 0;
   const upperBottom = t + drawerZone; // 선반/문 구역 시작 높이
+  const doorZoneHeight = Math.max(h - upperBottom, 0.2);
+  const doorShelfPositionsY = Array.from({ length: shelfCount }).map(
+    (_, index) => t + ((h - upperBottom - t * 2) * (index + 1)) / (shelfCount + 1),
+  );
   const isSliding = hasDoors && (input.open_type ?? "").includes("슬라이딩");
-  const openAll = selected || viewMode === "doors_open";
+  const openAll = viewMode === "doors_open";
+  const doorsOpenOnSelect = selected || openAll;
 
   return (
     <group rotation={[0, frontView ? 0 : -0.38, 0]}>
@@ -173,7 +89,7 @@ export function ShelfRenderer({
             material={material}
             doorStyle={doorStyle}
             viewMode={viewMode}
-            open={openAll}
+            open={doorsOpenOnSelect}
             openDirection={(input.door_swing ?? "right") === "left" ? "left" : "right"}
           />
         </group>
@@ -183,7 +99,7 @@ export function ShelfRenderer({
           <Doors
             count={doorCount}
             width={w}
-            height={Math.max(h - upperBottom, 0.2)}
+            height={doorZoneHeight}
             depth={d}
             thickness={t}
             material={material}
@@ -192,6 +108,7 @@ export function ShelfRenderer({
             viewMode={viewMode}
             doorSwing={input.door_swing ?? "pair"}
             animatedOpen={selected}
+            shelfPositionsY={doorShelfPositionsY}
           />
         </group>
       )}

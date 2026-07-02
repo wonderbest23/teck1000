@@ -17,7 +17,12 @@ import type { DoorSwing, KitchenModulePart, PreviewEditTarget } from "@/componen
 import { KITCHEN_STANDARDS } from "@/lib/platformConfig";
 import { getKitchenSetDimensions, KITCHEN_DIMENSION_LIMITS } from "@/lib/kitchen";
 import type { KitchenModuleType } from "@/lib/kitchen";
-import type { FurnitureInput } from "@/lib/types";
+import type { FurnitureInput, ProductType } from "@/lib/types";
+
+/** 방 씬에서 단일 모듈로 편집되는 수납 가구 — 선택 시 문 열림·StorageEditLayer 활성 */
+function isRoomStorageProduct(productType: ProductType): boolean {
+  return ["custom_shelf", "gap_cabinet", "shoe_cabinet", "desk", "living_cabinet"].includes(productType);
+}
 
 // 선택된 주방 칸을 3D에서 클릭 편집할 때 DraggableItem에 넘기는 상호작용 묶음
 type KitchenInteractive = {
@@ -182,8 +187,9 @@ function DraggableItem({
   const centerY = bottomY + boxHeight / 2;
   const topY = footprint.topY;
   const resizable = item.input.productType !== "kitchen_full_set";
+  const storageActive = selected && isRoomStorageProduct(item.input.productType);
 
-  // 가로/깊이 핸들 — 잡은 쪽만 늘어나고 반대편 모서리는 고정(앵커). sign=+1:오른쪽/앞, -1:왼쪽/뒤. 회전 반영.
+  // 가로/깊이 핸들
   function startResizeEdge(axis: "x" | "z", sign: 1 | -1, event: { stopPropagation: () => void; clientX: number; clientY: number }) {
     event.stopPropagation();
     onSelect(item.id);
@@ -244,13 +250,19 @@ function DraggableItem({
         viewMode={doorsOpen ? "doors_open" : "exterior"}
         doorStyle={item.input.door_style ?? "flat"}
         frontView
-        selectedModuleIndex={kitchen ? kitchen.selectedModuleIndex : null}
+        selectedModuleIndex={kitchen ? kitchen.selectedModuleIndex : storageActive ? 0 : null}
         selectedModulePart={kitchen?.selectedModulePart}
         selectedEditTarget="module"
         activeDragTarget={null}
         dragRatio={null}
         showDimensions={showDimensions}
-        onSelectModule={kitchen ? kitchen.onSelectModule : () => {}}
+        onSelectModule={
+          kitchen
+            ? kitchen.onSelectModule
+            : () => {
+                onSelect(item.id);
+              }
+        }
         onAddModule={kitchen?.onAddModule}
         onRemoveModule={kitchen?.onRemoveModule}
         onModuleWidthChange={kitchen?.onModuleWidthChange}
@@ -268,7 +280,7 @@ function DraggableItem({
         onSideModuleWidthChange={kitchen?.onSideModuleWidthChange}
         onEditStart={() => {}}
         onEditEnd={() => {}}
-        interactive={Boolean(kitchen)}
+        interactive={editable && (Boolean(kitchen) || storageActive)}
         embedded
       />
       </FinishProvider>
@@ -724,7 +736,7 @@ export function RoomScene({
     );
   } else if (editable && selectedItem) {
     const sInput = selectedItem.input;
-    const isStorage = ["custom_shelf", "gap_cabinet", "shoe_cabinet"].includes(sInput.productType);
+    const isStorage = ["desk", "living_cabinet", "custom_shelf", "gap_cabinet", "shoe_cabinet"].includes(sInput.productType);
     const isWardrobeItem = sInput.productType === "built_in_wardrobe";
     const patchItem = (patch: Partial<FurnitureInput>) => onCommitItem(selectedItem.id, { ...sInput, ...patch });
     const storageDrawerCount = Math.min(4, Math.max(0, Math.round(sInput.storage_drawer_count ?? 0)));

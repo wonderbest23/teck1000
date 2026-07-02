@@ -47,7 +47,7 @@ export function StudioRectLights({ scale = 1 }: { scale?: number }) {
     </>
   );
 }
-import { getDoorOpenAngle, isDoorTransparent, shouldRenderDoors } from "@/components/preview3d/modes/visibilityModes";
+import { getDoorOpenAngle, isDoorTransparent, shouldRenderDoors, shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
 import { lighten } from "@/components/preview3d/materials";
 import type { DoorStyle, DoorSwing, MaterialColors, PreviewViewMode } from "@/components/preview3d/types";
 
@@ -211,12 +211,62 @@ function Hinge({ x, y, z, armDirX = 0, armDirY = 0 }: { x: number; y: number; z:
         <cylinderGeometry args={[0.016, 0.016, 0.012, 14]} />
         <meshStandardMaterial color="#aeb6bd" metalness={0.75} roughness={0.32} />
       </mesh>
-      <mesh position={[armDirX * 0.024, armDirY * 0.024, -0.004]}>
+      <mesh position={[armDirX * 0.024, armDirY * 0.024, -0.012]}>
         <boxGeometry args={[armDirX !== 0 ? 0.05 : 0.016, armDirY !== 0 ? 0.05 : 0.016, 0.012]} />
         <meshStandardMaterial color="#99a2aa" metalness={0.7} roughness={0.4} />
       </mesh>
     </group>
   );
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function resolveSideHingeYs(
+  doorHeight: number,
+  hingeCount: number,
+  shelfLocalYs: number[],
+) {
+  const inset = Math.min(0.11, doorHeight * 0.2);
+  const minY = -doorHeight / 2 + inset;
+  const maxY = doorHeight / 2 - inset;
+  const shelfClearance = 0.07;
+  const hingeSpacing = 0.18;
+  const step = 0.01;
+  const anchors = hingeCount === 3 ? [maxY, 0, minY] : [maxY, minY];
+  const directions = hingeCount === 3 ? [-1, 1, 1] : [-1, 1];
+  const selected: number[] = [];
+
+  const isClear = (candidate: number) => {
+    const clearsShelves = shelfLocalYs.every((shelfY) => Math.abs(candidate - shelfY) >= shelfClearance);
+    const clearsHinges = selected.every((takenY) => Math.abs(candidate - takenY) >= hingeSpacing);
+    return clearsShelves && clearsHinges;
+  };
+
+  for (let index = 0; index < anchors.length; index += 1) {
+    const anchor = anchors[index];
+    const direction = directions[index];
+    let placed: number | null = null;
+
+    for (let i = 0; i < 240; i += 1) {
+      const delta = i * step;
+      const primary = clampNumber(anchor + delta * direction, minY, maxY);
+      const secondary = clampNumber(anchor - delta * direction, minY, maxY);
+      const candidates = i === 0 ? [primary] : [primary, secondary];
+      for (const candidate of candidates) {
+        if (isClear(candidate)) {
+          placed = candidate;
+          break;
+        }
+      }
+      if (placed !== null) break;
+    }
+
+    selected.push(placed ?? clampNumber(anchor, minY, maxY));
+  }
+
+  return selected;
 }
 
 function DoorLeaf({
@@ -233,6 +283,8 @@ function DoorLeaf({
   transparent,
   doorOpacity,
   targetAngle,
+  showHinges,
+  shelfLocalYs = [],
 }: {
   index: number;
   width: number;
@@ -247,6 +299,8 @@ function DoorLeaf({
   transparent: boolean;
   doorOpacity: number;
   targetAngle: number;
+  showHinges: boolean;
+  shelfLocalYs?: number[];
 }) {
   const ref = useRef<Group>(null);
   const gap = 0.008;
@@ -292,20 +346,19 @@ function DoorLeaf({
         {!transparent && showHandles && isBottomHinge && <TopHandle doorHeight={doorHeight} color={material.edge} />}
         {!transparent && showHandles && isTopHinge && <BottomHandle doorHeight={doorHeight} color={material.edge} />}
         {/* 경첩 — 경첩 쪽 모서리 안쪽(문 뒷면), 키 큰 문은 3개. 서랍(DrawerStack)에는 문이 없어 자동으로 제외 */}
-        {!transparent && hingeSide === "side" && doorWidth > 0.16 && (() => {
+        {!transparent && showHinges && hingeSide === "side" && doorWidth > 0.16 && (() => {
           const sign = hingeOnRight ? 1 : -1;
           const hx = sign * (doorWidth / 2 - 0.03);
           const count = doorHeight > 1.5 ? 3 : 2;
-          const inset = Math.min(0.11, doorHeight * 0.2);
-          const ys = count === 3 ? [doorHeight / 2 - inset, 0, -(doorHeight / 2 - inset)] : [doorHeight / 2 - inset, -(doorHeight / 2 - inset)];
-          return ys.map((hy, i) => <Hinge key={`hinge-${i}`} x={hx} y={hy} z={-thickness * 0.5 - 0.008} armDirX={sign} />);
+          const ys = resolveSideHingeYs(doorHeight, count, shelfLocalYs);
+          return ys.map((hy, i) => <Hinge key={`hinge-${i}`} x={hx} y={hy} z={-thickness * 0.5 - 0.022} armDirX={sign} />);
         })()}
-        {!transparent && isHorizontalHinge && doorWidth > 0.16 && (() => {
+        {!transparent && showHinges && isHorizontalHinge && doorWidth > 0.16 && (() => {
           const sign = isTopHinge ? 1 : -1;
           const hy = sign * (doorHeight / 2 - 0.03);
           const inset = Math.min(0.12, doorWidth * 0.2);
           return [doorWidth / 2 - inset, -(doorWidth / 2 - inset)].map((hx, i) => (
-            <Hinge key={`hinge-h-${i}`} x={hx} y={hy} z={-thickness * 0.5 - 0.008} armDirY={sign} />
+            <Hinge key={`hinge-h-${i}`} x={hx} y={hy} z={-thickness * 0.5 - 0.022} armDirY={sign} />
           ));
         })()}
       </group>
@@ -326,6 +379,7 @@ export function Doors({
   hingeSide = "side",
   doorSwing = "pair",
   animatedOpen = false,
+  shelfPositionsY = [],
 }: {
   count: number;
   width: number;
@@ -339,6 +393,7 @@ export function Doors({
   hingeSide?: "side" | "bottom" | "top";
   doorSwing?: DoorSwing;
   animatedOpen?: boolean;
+  shelfPositionsY?: number[];
 }) {
   if (count <= 0 || !shouldRenderDoors(viewMode)) return null;
   const gap = 0.008;
@@ -350,6 +405,7 @@ export function Doors({
   const transparent = isDoorTransparent(viewMode);
   const openAngle = animatedOpen ? Math.PI * 0.42 : getDoorOpenAngle(viewMode);
   const doorOpacity = transparent ? 0.14 : 1;
+  const showHinges = openAngle > 0.001 || shouldShowInteriorHints(viewMode);
 
   return (
     <group>
@@ -359,6 +415,7 @@ export function Doors({
         const hingeOnRight = resolvedHingeSide === "side" && (doorSwing === "right" || (doorSwing === "pair" && index % 2 === 1));
         const hingeX = resolvedHingeSide === "side" ? (hingeOnRight ? x + doorWidth / 2 : x - doorWidth / 2) : x;
         const hingeY = resolvedHingeSide === "bottom" ? y - doorHeight / 2 : resolvedHingeSide === "top" ? y + doorHeight / 2 : y;
+        const shelfLocalYs = shelfPositionsY.map((shelfY) => shelfY - y);
         return (
           <group key={`door-${index}`} position={[hingeX, hingeY, z]}>
             <DoorLeaf
@@ -375,6 +432,8 @@ export function Doors({
               transparent={transparent}
               doorOpacity={doorOpacity}
               targetAngle={openAngle}
+              showHinges={showHinges}
+              shelfLocalYs={shelfLocalYs}
             />
           </group>
         );
@@ -553,6 +612,7 @@ export function SimpleCabinet({
   const t = 0.018;
   const innerWidth = Math.max(width - t * 2, 0.04);
   const faint = showInterior;
+  const shelfPositionsY = Array.from({ length: shelfCount }).map((_, index) => t + ((height - t * 2) * (index + 1)) / (shelfCount + 1));
 
   return (
     <group position={[x, y, 0]}>
@@ -563,7 +623,7 @@ export function SimpleCabinet({
       <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
       <Panel size={[width, height, t * 0.6]} position={[0, height / 2, -depth / 2 + t * 0.3]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
       {Array.from({ length: shelfCount }).map((_, index) => {
-        const shelfY = t + ((height - t * 2) * (index + 1)) / (shelfCount + 1);
+        const shelfY = shelfPositionsY[index];
         return (
           <group key={`shelf-${index}`}>
             <Panel
@@ -597,6 +657,7 @@ export function SimpleCabinet({
         viewMode={viewMode}
         doorSwing={doorSwing}
         animatedOpen={animatedOpen}
+        shelfPositionsY={shelfPositionsY}
       />
     </group>
   );

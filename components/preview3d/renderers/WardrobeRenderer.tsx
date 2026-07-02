@@ -23,7 +23,8 @@ import {
   type WardrobeModuleType,
 } from "@/lib/wardrobe";
 import { productRules } from "@/lib/rules";
-import type { DoorSwing, MaterialColors, PreviewRendererProps } from "@/components/preview3d/types";
+import { shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
+import type { DoorSwing, MaterialColors, PreviewRendererProps, PreviewViewMode } from "@/components/preview3d/types";
 
 function HangingRod({ x1, x2, y, z = 0 }: { x1: number; x2: number; y: number; z?: number }) {
   const length = Math.max(Math.abs(x2 - x1), 0.05);
@@ -70,21 +71,22 @@ function DrawerStack({
 
   return (
     <group>
-      {Array.from({ length: safeCount }).map((_, index) => {
-        const y = height - gap - faceHeight / 2 - index * (faceHeight + gap);
-        return (
-          <group key={`drawer-fixed-rails-${index}`} position={[0, y - faceHeight * 0.08, 0]}>
-            {[-1, 1].map((side) => (
-              <Trim
-                key={`drawer-fixed-rail-${index}-${side}`}
-                size={[0.018, 0.018, depth * 0.62]}
-                position={[side * width * 0.47, 0, -depth * 0.04]}
-                color="#94a3b8"
-              />
-            ))}
-          </group>
-        );
-      })}
+      {active &&
+        Array.from({ length: safeCount }).map((_, index) => {
+          const y = height - gap - faceHeight / 2 - index * (faceHeight + gap);
+          return (
+            <group key={`drawer-fixed-rails-${index}`} position={[0, y - faceHeight * 0.08, 0]}>
+              {[-1, 1].map((side) => (
+                <Trim
+                  key={`drawer-fixed-rail-${index}-${side}`}
+                  size={[0.018, 0.018, depth * 0.62]}
+                  position={[side * width * 0.47, 0, -depth * 0.04]}
+                  color="#94a3b8"
+                />
+              ))}
+            </group>
+          );
+        })}
       {Array.from({ length: safeCount }).map((_, index) => {
         const y = height - gap - faceHeight / 2 - index * (faceHeight + gap);
         return (
@@ -96,18 +98,22 @@ function DrawerStack({
             position={[0, y, frontZ]}
           >
             <Panel size={[width * 0.92, faceHeight, 0.018]} position={[0, 0, 0]} color={material.color} edge={material.edge} />
-            <Panel size={[boxWidth, 0.012, boxDepth]} position={[0, -faceHeight * 0.2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
-            <Panel size={[0.014, sideHeight, boxDepth]} position={[-boxWidth / 2, -faceHeight * 0.2 + sideHeight / 2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
-            <Panel size={[0.014, sideHeight, boxDepth]} position={[boxWidth / 2, -faceHeight * 0.2 + sideHeight / 2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
-            <Panel size={[boxWidth, sideHeight, 0.014]} position={[0, -faceHeight * 0.2 + sideHeight / 2, -boxDepth]} color={lighten(material.color)} edge={material.edge} />
-            {[-1, 1].map((side) => (
-              <Trim
-                key={`drawer-moving-rail-${index}-${side}`}
-                size={[0.012, 0.014, boxDepth * 0.9]}
-                position={[side * (boxWidth / 2 + 0.012), -faceHeight * 0.05, -boxDepth / 2]}
-                color="#64748b"
-              />
-            ))}
+            {active && (
+              <>
+                <Panel size={[boxWidth, 0.012, boxDepth]} position={[0, -faceHeight * 0.2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
+                <Panel size={[0.014, sideHeight, boxDepth]} position={[-boxWidth / 2, -faceHeight * 0.2 + sideHeight / 2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
+                <Panel size={[0.014, sideHeight, boxDepth]} position={[boxWidth / 2, -faceHeight * 0.2 + sideHeight / 2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
+                <Panel size={[boxWidth, sideHeight, 0.014]} position={[0, -faceHeight * 0.2 + sideHeight / 2, -boxDepth]} color={lighten(material.color)} edge={material.edge} />
+                {[-1, 1].map((side) => (
+                  <Trim
+                    key={`drawer-moving-rail-${index}-${side}`}
+                    size={[0.012, 0.014, boxDepth * 0.9]}
+                    position={[side * (boxWidth / 2 + 0.012), -faceHeight * 0.05, -boxDepth / 2]}
+                    color="#64748b"
+                  />
+                ))}
+              </>
+            )}
             <Trim size={[width * 0.4, 0.016, 0.026]} position={[0, faceHeight * 0.16, 0.024]} color={material.edge} />
           </group>
         );
@@ -151,7 +157,7 @@ function WardrobeModuleInterior({
     return (
       <group>
         <DrawerStack width={innerW} height={zoneM} depth={depth} count={safeDrawerCount} material={material} active={reveal} />
-        {hasUpper && (
+        {hasUpper && reveal && (
           <group>
             <HangingRod x1={-innerW / 2} x2={innerW / 2} y={upperRodY} />
           </group>
@@ -222,6 +228,7 @@ function WardrobeModule({
   onDepthChange,
   onShelfCountChange,
   onDrawerCountChange,
+  viewMode,
 }: {
   x: number;
   width: number;
@@ -237,6 +244,7 @@ function WardrobeModule({
   interactive: boolean;
   sliding: boolean;
   doorSwing: DoorSwing;
+  viewMode: PreviewViewMode;
   widthLimits: StorageDimensionLimits;
   widthMm: number;
   heightMm: number;
@@ -252,8 +260,12 @@ function WardrobeModule({
   const innerWidth = Math.max(width - t * 2, 0.04);
   const hasDoor = type !== "drawer";
   const doorCount = hasDoor && !sliding ? (width > 0.7 ? 2 : 1) : 0;
-  // 슬라이딩이면 전면을 전체 슬라이딩 도어가 덮으므로 내부를 항상 보이게 둔다.
-  const revealInterior = sliding || selected || !hasDoor;
+  const doorShelfPositionsY =
+    type === "shelf"
+      ? Array.from({ length: Math.max(1, shelfCount) }).map((_, index) => t + ((height - t * 2) * (index + 1)) / (Math.max(1, shelfCount) + 1))
+      : [];
+  // 문열림·X-ray 등 내부 표시 모드에서만 레일·선반 내부 디테일
+  const revealInterior = shouldShowInteriorHints(viewMode);
 
   return (
     <group position={[x, 0, 0]}>
@@ -286,9 +298,10 @@ function WardrobeModule({
           material={material}
           doorStyle={doorStyle}
           showHandles={showHandles}
-          viewMode="exterior"
+          viewMode={viewMode}
           doorSwing={doorSwing}
           animatedOpen={selected}
+          shelfPositionsY={doorShelfPositionsY}
         />
       )}
 
@@ -323,6 +336,7 @@ export function WardrobeRenderer({
   input,
   doorStyle,
   frontView,
+  viewMode,
   interactive = false,
   selectedModuleIndex = null,
   onSelectModule,
@@ -392,6 +406,7 @@ export function WardrobeRenderer({
           onDepthChange={onModuleDepthChange}
           onShelfCountChange={onShelfCountChange}
           onDrawerCountChange={onDrawerCountChange}
+          viewMode={viewMode}
         />
       ))}
 
@@ -404,8 +419,8 @@ export function WardrobeRenderer({
           thickness={BOARD_THICKNESS_M}
           material={material}
           doorStyle={doorStyle}
-          viewMode="exterior"
-          open={interactive && selectedModuleIndex !== null}
+          viewMode={viewMode}
+          open={viewMode === "doors_open" && interactive && selectedModuleIndex !== null}
           openDirection={(input.door_swing ?? "right") === "left" ? "left" : "right"}
         />
       )}

@@ -33,6 +33,7 @@ export function ShoeCabinetRenderer({
   const innerWidth = Math.max(w - t * 2, 0.04);
   const shelfCount = Math.max(4, Math.floor(input.shelf_count || 6));
   const doorCount = Math.max(1, Math.floor(input.door_count || 1));
+  const shelfPositionsY = Array.from({ length: shelfCount }).map((_, index) => t + ((h - t * 2) * (index + 1)) / (shelfCount + 1));
   const showInterior = shouldShowInteriorHints(viewMode);
   const tilted = input.shoe_shelf_angle ?? false;
   const selected = selectedModuleIndex === 0;
@@ -47,7 +48,7 @@ export function ShoeCabinetRenderer({
       <Panel size={[innerWidth, t, d]} position={[0, t / 2, 0]} color={material.color} edge={material.edge} />
       <Panel size={[w, h, t * 0.5]} position={[0, h / 2, -d / 2 + t * 0.25]} color={lighten(material.color)} edge={material.edge} />
       {Array.from({ length: shelfCount }).map((_, index) => {
-        const y = t + ((h - t * 2) * (index + 1)) / (shelfCount + 1);
+        const y = shelfPositionsY[index];
         const tiltZ = tilted ? -0.12 : 0;
         return (
           <group key={`shoe-shelf-${index}`} position={[0, y, 0.01]} rotation={[tiltZ, 0, 0]}>
@@ -67,6 +68,7 @@ export function ShoeCabinetRenderer({
         viewMode={viewMode}
         doorSwing={input.door_swing ?? "pair"}
         animatedOpen={selected}
+        shelfPositionsY={shelfPositionsY}
       />
       <StorageEditLayer
         interactive={interactive}

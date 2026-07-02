@@ -147,7 +147,8 @@ export function Preview3D({
   const materialPreset = getMaterialPreset(input.material);
   const selectedMaterial = materialPresets[materialPreset];
   const doorStyle: DoorStyle = input.door_style ?? "flat";
-  const viewMode: PreviewViewMode = doorsOpen ? "doors_open" : "exterior";
+  const [manualDoorsOpen, setManualDoorsOpen] = useState(false);
+  const viewMode: PreviewViewMode = doorsOpen || manualDoorsOpen ? "doors_open" : "exterior";
   const freeView = true;
   const [selectedModulePart, setSelectedModulePart] = useState<KitchenModulePart>("base");
   const [selectedEditTarget, setSelectedEditTarget] = useState<PreviewEditTarget>("module");
@@ -192,6 +193,10 @@ export function Preview3D({
     onModuleSelect?.(activeSelectedModule);
   }, [activeSelectedModule, onModuleSelect]);
 
+  useEffect(() => {
+    setManualDoorsOpen(false);
+  }, [input.productType]);
+
 
   function handleSelectModule(index: number, part: KitchenModulePart, target: PreviewEditTarget = "module") {
     if (isWardrobe) {
@@ -199,7 +204,7 @@ export function Preview3D({
       return;
     }
     if (isStorageProduct) {
-      setStorageSelected((value) => !value);
+      setStorageSelected(true);
       return;
     }
     if (editor.consumeLayerClickSuppression()) return;
@@ -245,6 +250,13 @@ export function Preview3D({
     setHiddenSizeBadgeKey(null);
     setStorageSelected(false);
     wardrobeEditor.clearSelected();
+  }
+
+  function handleDoubleClickModule(index: number, part: KitchenModulePart) {
+    handleSelectModule(index, part, "module");
+    if (!doorsOpen) {
+      setManualDoorsOpen((current) => !current);
+    }
   }
 
   const activeFrame = useMemo(() => {
@@ -814,6 +826,7 @@ export function Preview3D({
               showDimensions={showDimensions}
               interactive={editable && (isKitchenBase || isKitchenSet || isStorageProduct)}
               onSelectModule={handleSelectModule}
+              onDoubleClickModule={handleDoubleClickModule}
               onSelectFixture={handleSelectFixture}
               onPrepareDragModule={editable && isKitchenSet ? editor.prepareModuleDrag : undefined}
               onPrepareDragItem={editable && isKitchenSet ? editor.prepareItemDrag : undefined}

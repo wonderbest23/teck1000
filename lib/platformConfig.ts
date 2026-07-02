@@ -79,6 +79,8 @@ export const PROCESS_QUOTE_STANDARDS = {
 
 /** Phase 4: 품목별 마진율 — 채널·복잡도 반영 */
 export const PRODUCT_MARGIN_RATES = {
+  desk: 0.13,
+  living_cabinet: 0.14,
   custom_shelf: 0.12,
   gap_cabinet: 0.14,
   shoe_cabinet: 0.14,

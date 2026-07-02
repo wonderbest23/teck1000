@@ -18,6 +18,16 @@ export type ProductRequirement = {
 const COMMON_REQUIRED = ["width_mm", "height_mm", "depth_mm", "material", "color"];
 
 export const PRODUCT_REQUIREMENTS: Record<ProductType, ProductRequirement> = {
+  desk: {
+    directOrderAllowed: true,
+    requiresSitePhotos: false,
+    requiredFields: [...COMMON_REQUIRED],
+  },
+  living_cabinet: {
+    directOrderAllowed: true,
+    requiresSitePhotos: false,
+    requiredFields: [...COMMON_REQUIRED, "shelf_count"],
+  },
   custom_shelf: {
     directOrderAllowed: true,
     requiresSitePhotos: false,

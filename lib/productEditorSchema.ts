@@ -21,6 +21,8 @@ const CHECK: EditorCategory = { id: "check", label: "검수·주문", icon: "✅
  * 칸 편집(modules)은 모듈형(상하부 세트·붙박이장)에서만, 주방 설비(fixtures)는 주방에서만 노출된다.
  */
 export const productEditorCategories: Record<ProductType, EditorCategory[]> = {
+  desk: [MATERIAL, SPEC, CHECK],
+  living_cabinet: [MATERIAL, SPEC, DOORS, CHECK],
   custom_shelf: [MATERIAL, SPEC, DOORS, CHECK],
   gap_cabinet: [MATERIAL, SPEC, DOORS, CHECK],
   shoe_cabinet: [MATERIAL, SPEC, DOORS, CHECK],
