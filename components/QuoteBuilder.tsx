@@ -21,6 +21,7 @@ import { ENTRANCE_STANDARDS, KITCHEN_STANDARDS, WARDROBE_STANDARDS, snapKitchenM
 import { PreOrderCheckPanel } from "@/components/PreOrderCheckPanel";
 import { EditorShell } from "@/components/editor/EditorShell";
 import { RedoIcon, UndoIcon } from "@/components/editor/HistoryControls";
+import { CoachMarks } from "@/components/CoachMarks";
 import { ModuleStripPlan } from "@/components/editor/ModuleStripPlan";
 import { ModuleListEditor } from "@/components/editor/ModuleListEditor";
 import { KitchenDrawingView } from "@/components/admin/KitchenDrawingView";
@@ -1548,12 +1549,22 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
           )}
           {!(isModularProduct && isPro && viewMode === "2d") ? (
             <>
+              {!showKitchenPreset && (
+                <CoachMarks
+                  steps={[
+                    { selector: "canvas", text: "① 가구(문짝)를 눌러보세요 — 크기·소재를 바로 조절할 수 있어요" },
+                    { selector: '[data-coach="mode"]', text: "② 보기/수정 전환 — 보기 모드는 감상용, 수정 모드에서 편집해요" },
+                    { selector: 'button[aria-label="전체모드"]', text: "전체화면은 여기! 크게 보면서 편집할 수 있어요" },
+                    { selector: '[data-coach="order"]', text: "③ 구성이 끝나면 여기로 — 검수 항목을 하나씩 안내해 드려요" },
+                  ]}
+                />
+              )}
               <RoomScene items={roomItems} placements={roomPlacements} selectedId={roomSelected} highlightId={justAddedId} expert={isPro} editable={canvasMode === "edit"} onSelect={setRoomSelected} onMove={moveRoomItem} onMoveEnd={endRoomMove} onResize={resizeRoomItem} onCommitItem={commitRoomItemById} onRotateItem={rotateRoomItem} onDuplicateItem={duplicateRoomItem} onRemoveItem={removeRoomItem} selectedNotice={selectedNotice} mobilePanelHost={mobilePanelHost} showDimensions={showDimensions} doorsOpen={doorsOpen} guides={roomGuides} floor={roomFloor} />
               {renderProductFlowPanel()}
 
               {/* 통합 툴바 — 보기/수정 모드 · 치수 · 문열림 · 자동정렬 · 실행취소를 한 곳에(글래스 바) */}
               <div className="pointer-events-auto absolute left-3 top-3 z-20 flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-white/85 p-1 shadow-lg shadow-slate-900/5 backdrop-blur-md">
-                <div className="flex rounded-xl bg-slate-100/80 p-0.5 text-[11px] font-black">
+                <div data-coach="mode" className="flex rounded-xl bg-slate-100/80 p-0.5 text-[11px] font-black">
                   {([["view", "보기"], ["edit", "수정"]] as const).map(([mode, label]) => (
                     <button
                       key={mode}
@@ -2113,6 +2124,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
               {/* 홀드(비활성) 대신 항상 진행 가능 — 조건 미충족이면 검수·주문 팝업을 열어 하나씩 해결 */}
               <button
                 type="button"
+                data-coach="order"
                 onClick={() => {
                   if (!canPlaceOrder) {
                     setActiveCat("check");
