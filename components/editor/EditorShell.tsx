@@ -63,7 +63,7 @@ export function EditorShell({
       <div className="w-full pb-24">
         {header}
         {/* 전체화면 미리보기 — 최상단 한 줄 툴바(섹션) + 그 아래 캔버스 */}
-        <div className="flex h-[58dvh] min-h-[360px] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-card lg:h-[64dvh]">
+        <div className="flex h-[74dvh] min-h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-card sm:h-[70dvh] sm:min-h-[560px] lg:h-[64dvh] lg:min-h-[520px]">
           {/* 상단 툴바 — 상품명·모드·토글 + 카테고리를 한 줄로 깔끔하게 (가로 스크롤) */}
           <div className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
             <div className="scrollbar-none flex items-center gap-1.5 overflow-x-auto px-2.5 py-2">
