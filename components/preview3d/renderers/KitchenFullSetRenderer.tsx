@@ -38,6 +38,7 @@ import {
 import {
   CooktopFixture,
   CountertopTrim,
+  CountertopWithCutout,
   FaucetFixture,
   HoodFixture,
   MicrowaveFixture,
@@ -1288,9 +1289,25 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
           onRestore={() => onRestoreModulePart?.(index, "wall")}
         />
       ) : null;})}
-      {countertop.id !== "none" && (
-        <Trim size={[w * 0.98, KITCHEN_COUNTERTOP_M, baseDepthM * 1.08]} position={[0, counterTopY + KITCHEN_COUNTERTOP_M / 2, 0.02]} color={countertop.id === "stainless" ? "#94a3b8" : "#e5e7eb"} />
-      )}
+      {countertop.id !== "none" && (() => {
+        // 싱크 자리에 실제 컷아웃을 낸 상판 — 구멍으로 싱크볼 내부가 그대로 보인다
+        const sinkCut = sink.id !== "none"
+          ? (() => {
+              const s = getSinkFixtureSpec(input.sink_option, (baseModules[sinkModuleIndex] ?? 900) / 1000);
+              return { x: sinkX, w: s.widthM + 0.004, d: s.depthM + 0.004, z: 0.06 };
+            })()
+          : null;
+        return (
+          <CountertopWithCutout
+            width={w * 0.98}
+            depth={baseDepthM * 1.08}
+            y={counterTopY}
+            z={0.02}
+            color={countertop.id === "stainless" ? "#94a3b8" : "#e5e7eb"}
+            cutout={sinkCut}
+          />
+        );
+      })()}
       {/* 칸 상세 편집은 우측 하단 도크(Kitchen3DEditDock). 단, 선택 표시 + 이동 핸들은 캐비닛 위에 띄운다 */}
       {interactive && selectedIndex !== null && !hasSelectedFixture && (
         <>

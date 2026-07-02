@@ -113,6 +113,11 @@ renderers/
   KitchenBaseRenderer.tsx     하부장 단품 / 아일랜드
   KitchenWallRenderer.tsx     상부장 단품
   KitchenFixtures.tsx         싱크/수전/쿡탑/후드/전자레인지 3D 픽스처
+                              · CountertopWithCutout: 싱크 자리에 실제 구멍을 낸 4분할 상판(구멍으로 볼 내부가 보임)
+                              · SinkFixture: 스텐 림+4벽+바닥+배수구, 더블볼 분리대 (규격은 sinkFixtureSpec)
+                              · CooktopFixture: 옵션 규격 폭 그대로 + 화구(가스 3구 버너/인덕션 히팅존 링)
+                              · 설비 규격 자동 맞춤: QuoteBuilder normalizeInput이 싱크(780→800/그 외 900)·쿡탑(600)·
+                                후드(스펙+40)·전자레인지(600) 배치 칸 폭을 최소 규격으로 자동 확장
   WardrobeRenderer.tsx        붙박이장
   ShoeCabinetRenderer.tsx     신발장
   ShelfRenderer.tsx           선반/틈새장

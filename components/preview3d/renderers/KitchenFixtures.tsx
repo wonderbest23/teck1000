@@ -15,6 +15,58 @@ export function CountertopTrim({ width, y, depth, countertopId }: { width: numbe
   );
 }
 
+/** 상판(슬랩) — 싱크 위치에 실제 컷아웃(구멍)을 낸 4분할 슬랩.
+ *  구멍이 실제로 뚫려 있어 그 안의 싱크볼 내부(벽·바닥·배수구)가 그대로 보인다. */
+export function CountertopWithCutout({
+  width,
+  depth,
+  y,
+  z = 0.02,
+  color,
+  cutout,
+}: {
+  width: number;
+  depth: number;
+  y: number;
+  z?: number;
+  color: string;
+  /** 컷아웃 사각형(월드 x 중심/개구 크기/z 중심). 없으면 통짜 슬랩 */
+  cutout?: { x: number; w: number; d: number; z: number } | null;
+}) {
+  const yMid = y + KITCHEN_COUNTERTOP_M / 2;
+  const left = -width / 2;
+  const right = width / 2;
+  const back = z - depth / 2;
+  const front = z + depth / 2;
+  const valid =
+    cutout &&
+    cutout.x - cutout.w / 2 > left + 0.01 &&
+    cutout.x + cutout.w / 2 < right - 0.01 &&
+    cutout.z - cutout.d / 2 > back + 0.005 &&
+    cutout.z + cutout.d / 2 < front - 0.005;
+  if (!cutout || !valid) {
+    return <Trim size={[width, KITCHEN_COUNTERTOP_M, depth]} position={[0, yMid, z]} color={color} />;
+  }
+  const cl = cutout.x - cutout.w / 2;
+  const cr = cutout.x + cutout.w / 2;
+  const cb = cutout.z - cutout.d / 2;
+  const cf = cutout.z + cutout.d / 2;
+  return (
+    <group>
+      {/* 좌/우 통판 */}
+      <Trim size={[cl - left, KITCHEN_COUNTERTOP_M, depth]} position={[(left + cl) / 2, yMid, z]} color={color} />
+      <Trim size={[right - cr, KITCHEN_COUNTERTOP_M, depth]} position={[(cr + right) / 2, yMid, z]} color={color} />
+      {/* 컷아웃 앞/뒤 스트립 */}
+      <Trim size={[cutout.w, KITCHEN_COUNTERTOP_M, cf - cb > 0 ? cb - back : 0.01]} position={[cutout.x, yMid, (back + cb) / 2]} color={color} />
+      <Trim size={[cutout.w, KITCHEN_COUNTERTOP_M, front - cf]} position={[cutout.x, yMid, (cf + front) / 2]} color={color} />
+    </group>
+  );
+}
+
+const SINK_STEEL = { color: "#9aa4ac", metalness: 0.8, roughness: 0.3 } as const;
+const SINK_STEEL_DARK = { color: "#6b747c", metalness: 0.75, roughness: 0.38 } as const;
+
+/** 싱크볼 — 상판 컷아웃 안에 실제 볼(4벽+바닥+배수구, 더블볼은 중간 분리대) */
 export function SinkFixture({
   x,
   counterTopY,
@@ -31,7 +83,16 @@ export function SinkFixture({
   onPointerDown?: (clientX: number, clientY: number) => void;
 }) {
   const spec = getSinkFixtureSpec(sinkOptionId, cabinetWidthM);
-  const rimY = counterTopY + KITCHEN_COUNTERTOP_M + spec.rimHeightM / 2;
+  const topY = counterTopY + KITCHEN_COUNTERTOP_M; // 상판 윗면
+  const w = spec.widthM;
+  const d = spec.depthM;
+  const zC = 0.06;
+  const bowlDepth = Math.max(0.1, Math.min(spec.bowlDepthM, 0.18));
+  const wallT = 0.012;
+  const rimH = 0.012;
+  const isDouble = (sinkOptionId ?? "").includes("double");
+  const bowlBottomY = topY - bowlDepth;
+  const drainXs = isDouble ? [x - w / 4, x + w / 4] : [x];
 
   return (
     <group
@@ -45,26 +106,68 @@ export function SinkFixture({
       }
     >
       {selected && (
-        <mesh position={[x, rimY + 0.01, 0.06]}>
-          <boxGeometry args={[spec.widthM + 0.08, spec.rimHeightM + 0.02, spec.depthM + 0.08]} />
-          <meshStandardMaterial color="#0ea5e9" transparent opacity={0.26} depthWrite={false} />
+        <mesh position={[x, topY + 0.02, zC]}>
+          <boxGeometry args={[w + 0.08, 0.05, d + 0.08]} />
+          <meshStandardMaterial color="#0ea5e9" transparent opacity={0.24} depthWrite={false} />
         </mesh>
       )}
-      <Trim size={[spec.widthM, spec.rimHeightM, spec.depthM]} position={[x, rimY, 0.06]} color="#94a3b8" />
-      <mesh position={[x, counterTopY + KITCHEN_COUNTERTOP_M - spec.bowlDepthM * 0.35, 0.04]}>
-        <boxGeometry args={[spec.widthM * 0.9, spec.bowlDepthM, spec.depthM * 0.85]} />
-        <meshStandardMaterial color="#64748b" transparent opacity={0.42} roughness={0.55} />
+      {/* 스텐 림 프레임 — 상판 위로 살짝 올라온 테두리 */}
+      <mesh position={[x, topY + rimH / 2, zC - d / 2 + wallT / 2]}>
+        <boxGeometry args={[w + wallT * 2, rimH, wallT]} />
+        <meshStandardMaterial {...SINK_STEEL} />
       </mesh>
-      {spec.hasMaster && (
-        <mesh position={[x, counterTopY - spec.bowlDepthM * 0.15, 0.02]}>
-          <boxGeometry args={[spec.widthM * 0.55, spec.bowlDepthM * 0.55, spec.depthM * 0.6]} />
-          <meshStandardMaterial color="#475569" transparent opacity={0.28} />
+      <mesh position={[x, topY + rimH / 2, zC + d / 2 - wallT / 2]}>
+        <boxGeometry args={[w + wallT * 2, rimH, wallT]} />
+        <meshStandardMaterial {...SINK_STEEL} />
+      </mesh>
+      <mesh position={[x - w / 2 - wallT / 2, topY + rimH / 2, zC]}>
+        <boxGeometry args={[wallT, rimH, d]} />
+        <meshStandardMaterial {...SINK_STEEL} />
+      </mesh>
+      <mesh position={[x + w / 2 + wallT / 2, topY + rimH / 2, zC]}>
+        <boxGeometry args={[wallT, rimH, d]} />
+        <meshStandardMaterial {...SINK_STEEL} />
+      </mesh>
+      {/* 볼 내부 — 열린 윗면: 4벽 + 바닥 (컷아웃 구멍으로 실제 내부가 보인다) */}
+      <mesh position={[x, topY - bowlDepth / 2, zC - d / 2 + wallT / 2]}>
+        <boxGeometry args={[w, bowlDepth, wallT]} />
+        <meshStandardMaterial {...SINK_STEEL_DARK} />
+      </mesh>
+      <mesh position={[x, topY - bowlDepth / 2, zC + d / 2 - wallT / 2]}>
+        <boxGeometry args={[w, bowlDepth, wallT]} />
+        <meshStandardMaterial {...SINK_STEEL_DARK} />
+      </mesh>
+      <mesh position={[x - w / 2 + wallT / 2, topY - bowlDepth / 2, zC]}>
+        <boxGeometry args={[wallT, bowlDepth, d]} />
+        <meshStandardMaterial {...SINK_STEEL_DARK} />
+      </mesh>
+      <mesh position={[x + w / 2 - wallT / 2, topY - bowlDepth / 2, zC]}>
+        <boxGeometry args={[wallT, bowlDepth, d]} />
+        <meshStandardMaterial {...SINK_STEEL_DARK} />
+      </mesh>
+      {/* 더블볼 분리대 */}
+      {isDouble && (
+        <mesh position={[x, topY - bowlDepth / 2, zC]}>
+          <boxGeometry args={[wallT * 1.6, bowlDepth, d - wallT * 2]} />
+          <meshStandardMaterial {...SINK_STEEL_DARK} />
         </mesh>
       )}
+      {/* 바닥(배수 방향으로 살짝 어둡게) + 배수구 */}
+      <mesh position={[x, bowlBottomY + 0.005, zC]}>
+        <boxGeometry args={[w - wallT, 0.01, d - wallT]} />
+        <meshStandardMaterial color="#7c858d" metalness={0.72} roughness={0.42} />
+      </mesh>
+      {drainXs.map((dx, i) => (
+        <mesh key={`drain-${i}`} position={[dx, bowlBottomY + 0.012, zC + d * 0.12]} rotation={[-Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.032, 0.032, 0.006, 20]} />
+          <meshStandardMaterial color="#3f474e" metalness={0.6} roughness={0.5} />
+        </mesh>
+      ))}
     </group>
   );
 }
 
+/** 쿡탑/가스레인지 — 옵션 규격 폭 그대로 + 화구(가스=3구 버너, 인덕션=글래스에 히팅존 링) */
 export function CooktopFixture({
   x,
   counterTopY,
@@ -78,6 +181,13 @@ export function CooktopFixture({
   selected?: boolean;
   onPointerDown?: (clientX: number, clientY: number) => void;
 }) {
+  const specMm = Number((cooktopId.match(/(\d{3,4})/) ?? [])[1]) || 560;
+  const w = Math.min(Math.max(specMm / 1000, 0.3), 0.9);
+  const d = 0.36;
+  const topY = counterTopY + KITCHEN_COUNTERTOP_M;
+  const isGas = cooktopId.includes("gas") || cooktopId.includes("range");
+  const burnerXs = isGas ? [-w * 0.3, 0, w * 0.3] : [-w * 0.24, w * 0.24];
+
   return (
     <group
       onPointerDown={
@@ -90,16 +200,39 @@ export function CooktopFixture({
       }
     >
       {selected && (
-        <mesh position={[x, counterTopY + KITCHEN_COUNTERTOP_M + 0.012, 0.06]}>
-          <boxGeometry args={[0.56, 0.018, 0.4]} />
+        <mesh position={[x, topY + 0.014, 0.06]}>
+          <boxGeometry args={[w + 0.08, 0.02, d + 0.08]} />
           <meshStandardMaterial color="#0ea5e9" transparent opacity={0.28} depthWrite={false} />
         </mesh>
       )}
-      <Trim
-        size={[0.48, 0.016, 0.32]}
-        position={[x, counterTopY + KITCHEN_COUNTERTOP_M + 0.01, 0.06]}
-        color={cooktopId.includes("gas") ? "#111827" : "#0f172a"}
-      />
+      {/* 본체 플레이트 — 가스=검정 팬서포트 베이스 / 인덕션=글래스 */}
+      <mesh position={[x, topY + 0.008, 0.06]}>
+        <boxGeometry args={[w, 0.016, d]} />
+        <meshStandardMaterial color={isGas ? "#14181d" : "#0b0f14"} metalness={0.35} roughness={isGas ? 0.6 : 0.18} />
+      </mesh>
+      {burnerXs.map((bx, i) => (
+        <group key={`burner-${i}`} position={[x + bx, topY + 0.017, 0.06]}>
+          {isGas ? (
+            <>
+              {/* 가스 버너: 팬서포트 링 + 버너캡 */}
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.055, 0.006, 8, 24]} />
+                <meshStandardMaterial color="#2d343b" metalness={0.5} roughness={0.55} />
+              </mesh>
+              <mesh position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.024, 0.028, 0.012, 20]} />
+                <meshStandardMaterial color="#454d55" metalness={0.55} roughness={0.45} />
+              </mesh>
+            </>
+          ) : (
+            /* 인덕션 히팅존 링 */
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.065, 0.0025, 8, 32]} />
+              <meshStandardMaterial color="#8a939b" metalness={0.3} roughness={0.4} />
+            </mesh>
+          )}
+        </group>
+      ))}
     </group>
   );
 }

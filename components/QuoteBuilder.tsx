@@ -11,7 +11,7 @@ import type { RoomAction, RoomStateSummary } from "@/lib/roomCommands";
 import { archiveDraft, readDraft, writeDraft } from "@/lib/quoteHistory";
 import { defaultInput, getProduct, materials } from "@/lib/data";
 import { formatMoney } from "@/lib/format";
-import { clampModuleIndex, cooktopOptions, countertopOptions, deriveModuleTypeCounts, faucetOptions, getKitchenSetDimensions, getKitchenTemplate, hoodOptions, kitchenTemplates, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, toeKickOptions } from "@/lib/kitchen";
+import { clampModuleIndex, cooktopOptions, countertopOptions, deriveModuleTypeCounts, faucetOptions, getHoodSpec, getKitchenSetDimensions, getKitchenTemplate, hoodOptions, kitchenTemplates, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, toeKickOptions } from "@/lib/kitchen";
 import { MAX_WARDROBE_MODULE_COUNT, MAX_WARDROBE_MODULE_WIDTH_MM, MIN_WARDROBE_MODULE_COUNT, MIN_WARDROBE_MODULE_WIDTH_MM, alignWardrobeCounts, getDefaultWardrobeModules, normalizeWardrobeModules, wardrobeModuleTypeLabels, type WardrobeModuleType } from "@/lib/wardrobe";
 import { calculateQuote } from "@/lib/quote";
 import { countOptionCases, getDoorCountOptions, getSafeDoorCount, productRules } from "@/lib/rules";
@@ -1768,10 +1768,41 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
   const moduleTypeCounts = kitchenLayout ? deriveModuleTypeCounts(kitchenLayout.moduleTypes) : null;
   const kitchenDimensions = kitchenTemplate ? getKitchenSetDimensions(input, kitchenTemplate) : null;
   const hasDoor = rules.allowsDoorless ? input.has_door : true;
-  const width = kitchenLayout?.width_mm ?? kitchenTemplate?.width_mm ?? input.width_mm;
   const maxModuleIndex = Math.max(0, (kitchenLayout?.modules.length ?? kitchenTemplate?.modules.length ?? 1) - 1);
   const defaultSinkIndex = clampModuleIndex(kitchenTemplate?.sinkModuleIndex ?? 0, maxModuleIndex);
   const defaultCooktopIndex = clampModuleIndex(kitchenTemplate?.cooktopModuleIndex ?? 0, maxModuleIndex);
+
+  // ── 설비 규격 자동 맞춤 — 싱크볼(780→800/그 외 900)·쿡탑(≥600)·후드(스펙 폭+여유)·전자레인지장(≥600)이
+  //    배치된 칸은 그 규격에 맞게 폭을 자동 확장한다(장이 설비에 맞춰 만들어지는 실제 제작 규칙). ──
+  const fixedModules = kitchenLayout ? [...kitchenLayout.modules] : null;
+  const fixedBase = kitchenLayout ? [...normalizeKitchenLayerWidths(kitchenLayout.modules, input.kitchen_base_modules_mm)] : null;
+  const fixedWall = kitchenLayout ? [...normalizeKitchenLayerWidths(kitchenLayout.modules, input.kitchen_wall_modules_mm)] : null;
+  if (kitchenLayout && fixedModules && fixedBase && fixedWall) {
+    const bump = (arr: number[], idx: number, minMm: number) => {
+      if (arr[idx] != null && arr[idx] < minMm) arr[idx] = minMm;
+    };
+    const sinkIdx = clampModuleIndex(input.sink_module_index ?? defaultSinkIndex, maxModuleIndex);
+    const cooktopIdx = clampModuleIndex(input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex);
+    const hoodIdx = clampModuleIndex(input.hood_module_index ?? input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex);
+    const microIdx = clampModuleIndex(input.microwave_module_index ?? maxModuleIndex, maxModuleIndex);
+    if (input.sink_option && input.sink_option !== "none") {
+      const minW = input.sink_option.includes("780") ? 800 : 900;
+      bump(fixedModules, sinkIdx, minW);
+      bump(fixedBase, sinkIdx, minW);
+    }
+    if (input.cooktop_option && input.cooktop_option !== "none") {
+      bump(fixedModules, cooktopIdx, 600);
+      bump(fixedBase, cooktopIdx, 600);
+    }
+    if (input.hood_option && input.hood_option !== "none") {
+      const minW = Math.max(600, Math.ceil((getHoodSpec(input.hood_option).widthMm + 40) / 10) * 10);
+      bump(fixedWall, hoodIdx, minW);
+    }
+    if (input.microwave_option && input.microwave_option !== "none") {
+      bump(fixedWall, microIdx, 600);
+    }
+  }
+  const width = fixedModules ? fixedModules.reduce((sum, moduleWidth) => sum + moduleWidth, 0) : (kitchenTemplate?.width_mm ?? input.width_mm);
   const isKitchenSet = input.productType === "kitchen_full_set";
   const isKitchenBase = input.productType === "kitchen_base_cabinet";
   return {
@@ -1789,9 +1820,9 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
     hood_option: isKitchenSet ? (input.hood_option ?? "none") : input.hood_option,
     cooktop_option: isKitchenSet ? (input.cooktop_option ?? "none") : input.cooktop_option,
     microwave_option: isKitchenSet ? (input.microwave_option ?? "none") : input.microwave_option,
-    kitchen_modules_mm: kitchenLayout?.modules ?? input.kitchen_modules_mm,
-    kitchen_base_modules_mm: kitchenLayout ? normalizeKitchenLayerWidths(kitchenLayout.modules, input.kitchen_base_modules_mm) : input.kitchen_base_modules_mm,
-    kitchen_wall_modules_mm: kitchenLayout ? normalizeKitchenLayerWidths(kitchenLayout.modules, input.kitchen_wall_modules_mm) : input.kitchen_wall_modules_mm,
+    kitchen_modules_mm: fixedModules ?? input.kitchen_modules_mm,
+    kitchen_base_modules_mm: fixedBase ?? input.kitchen_base_modules_mm,
+    kitchen_wall_modules_mm: fixedWall ?? input.kitchen_wall_modules_mm,
     kitchen_base_height_mm: kitchenDimensions?.baseHeightMm ?? input.kitchen_base_height_mm,
     kitchen_base_depth_mm: kitchenDimensions?.baseDepthMm ?? input.kitchen_base_depth_mm,
     kitchen_wall_height_mm: kitchenDimensions?.wallHeightMm ?? input.kitchen_wall_height_mm,
