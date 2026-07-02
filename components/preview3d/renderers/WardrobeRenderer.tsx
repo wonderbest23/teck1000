@@ -376,6 +376,7 @@ export function WardrobeRenderer({
           doorStyle={doorStyle}
           viewMode="exterior"
           open={interactive && selectedModuleIndex !== null}
+          openDirection={(input.door_swing ?? "right") === "left" ? "left" : "right"}
         />
       )}
       {showDimensions && <BoxDimensions widthMm={Math.round(totalW * 1000)} heightMm={input.height_mm} depthMm={input.depth_mm} w={totalW} h={h} d={d} />}

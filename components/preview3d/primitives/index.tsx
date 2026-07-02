@@ -460,6 +460,7 @@ export function SlidingDoors({
   doorStyle,
   viewMode,
   open = false,
+  openDirection = "right",
 }: {
   width: number;
   height: number;
@@ -469,6 +470,7 @@ export function SlidingDoors({
   doorStyle: DoorStyle;
   viewMode: PreviewViewMode;
   open?: boolean;
+  openDirection?: "left" | "right";
 }) {
   if (!shouldRenderDoors(viewMode)) return null;
   const transparent = isDoorTransparent(viewMode);
@@ -479,10 +481,11 @@ export function SlidingDoors({
   const backZ = depth / 2 + thickness * 0.5;
   const leftX = -width / 4;
   const rightX = width / 4;
+  const opensLeft = openDirection === "left";
 
   return (
     <group>
-      {/* 뒤쪽 트랙: 왼쪽 패널 (고정) */}
+      {/* 뒤쪽 트랙 */}
       <SlidingPanel
         width={panelWidth}
         height={height - thickness}
@@ -492,12 +495,12 @@ export function SlidingDoors({
         transparent={transparent}
         opacity={opacity}
         xClosed={leftX}
-        xOpen={leftX}
-        z={backZ}
+        xOpen={opensLeft ? rightX - 0.012 : leftX}
+        z={opensLeft ? frontZ : backZ}
         open={open}
         handleSide={1}
       />
-      {/* 앞쪽 트랙: 오른쪽 패널 (열면 왼쪽으로 슬라이드되어 오른쪽 칸을 개방) */}
+      {/* 앞쪽 트랙 */}
       <SlidingPanel
         width={panelWidth}
         height={height - thickness}
@@ -507,8 +510,8 @@ export function SlidingDoors({
         transparent={transparent}
         opacity={opacity}
         xClosed={rightX}
-        xOpen={leftX + 0.012}
-        z={frontZ}
+        xOpen={opensLeft ? rightX : leftX + 0.012}
+        z={opensLeft ? backZ : frontZ}
         open={open}
         handleSide={-1}
       />

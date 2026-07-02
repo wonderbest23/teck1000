@@ -1015,6 +1015,19 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   // 검수·주문은 카테고리 버튼에서 뺐지만(하단 CTA로 진입) 팝업 제목은 필요 — 폴백 라벨
   const activeLabel = categories.find((cat) => cat.id === activeCat)?.label ?? (activeCat === "check" ? "검수·주문" : "");
   const effectiveLabel = categories.find((cat) => cat.id === effectiveCat)?.label ?? (effectiveCat === "check" ? "검수·주문" : "");
+  const beginnerSteps = [
+    { id: "spec", label: "치수", hint: activeInput.productType === "kitchen_full_set" ? "전체 길이와 칸 수를 먼저 맞추세요." : "가로·높이·깊이를 먼저 맞추세요." },
+    { id: "modules", label: "구성", hint: "3D에서 칸을 누르고 서랍장·문장·오픈장으로 바꾸세요." },
+    { id: "fixtures", label: "설비", hint: "싱크볼·쿡탑·후드는 위치가 맞아야 합니다." },
+    { id: "doors", label: "문", hint: "문 방향·손잡이·슬라이딩 방향을 확인하세요." },
+    { id: "check", label: "검수", hint: "주문 전 누락된 조건만 마지막으로 확인하세요." },
+  ].filter((step) => {
+    if (step.id === "fixtures") return activeInput.productType === "kitchen_full_set" || activeInput.productType === "kitchen_base_cabinet";
+    if (step.id === "modules") return activeInput.productType === "kitchen_full_set" || activeInput.productType === "built_in_wardrobe";
+    return true;
+  });
+  const currentGuideIndex = Math.max(0, beginnerSteps.findIndex((step) => step.id === effectiveCat));
+  const currentGuide = beginnerSteps[currentGuideIndex] ?? beginnerSteps[0];
 
   // '＋ 가구 추가' 시트 내용 — 데스크톱(캔버스 위 반투명 플로팅)과 모바일(섹션 아래)이 공유
   const addSheetBody = (
@@ -1254,6 +1267,26 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       }
       panel={
         <>
+                <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-xs font-black text-sky-950">초보자 제작 순서</div>
+                    <div className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-sky-700 ring-1 ring-sky-200">{currentGuideIndex + 1}/{beginnerSteps.length}</div>
+                  </div>
+                  <div className="flex gap-1 overflow-x-auto pb-1">
+                    {beginnerSteps.map((step, index) => (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setActiveCat(step.id === "check" ? "check" : step.id)}
+                        className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-black transition ${index === currentGuideIndex ? "bg-brand text-white" : index < currentGuideIndex ? "bg-white text-sky-700 ring-1 ring-sky-200" : "bg-sky-100 text-sky-500"}`}
+                      >
+                        {index + 1}. {step.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-1.5 text-[11px] font-bold leading-5 text-sky-900">{currentGuide.hint}</div>
+                </div>
+
                 {effectiveCat === "material" && (
                   <div>
                     <div className="mb-2 text-xs font-black text-slate-500">소재</div>
@@ -1331,6 +1364,9 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                       <>
                         <SelectField label="후드" value={activeInput.hood_option ?? "haatz_slide_600"} onChange={(value) => updateActive("hood_option", value)} options={hoodOptions.map((option) => ({ value: option.id, label: option.name }))} />
                         <SelectField label="쿡탑/가스렌지" value={activeInput.cooktop_option ?? "none"} onChange={(value) => updateActive("cooktop_option", value)} options={cooktopOptions.map((option) => ({ value: option.id, label: option.name }))} />
+                        <div className="rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-5 text-emerald-900 ring-1 ring-emerald-200">
+                          후드는 쿡탑 칸 중앙에 자동으로 맞춰집니다. 쿡탑 칸을 옮기면 먼지 흡입 위치가 어긋나지 않게 후드도 같이 따라갑니다.
+                        </div>
                         <SelectField label="전자레인지장" value={activeInput.microwave_option ?? "none"} onChange={(value) => updateActive("microwave_option", value)} options={microwaveOptions.map((option) => ({ value: option.id, label: option.name }))} />
                       </>
                     )}
@@ -1834,6 +1870,15 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
   const maxModuleIndex = Math.max(0, (kitchenLayout?.modules.length ?? kitchenTemplate?.modules.length ?? 1) - 1);
   const defaultSinkIndex = clampModuleIndex(kitchenTemplate?.sinkModuleIndex ?? 0, maxModuleIndex);
   const defaultCooktopIndex = clampModuleIndex(kitchenTemplate?.cooktopModuleIndex ?? 0, maxModuleIndex);
+  const normalizedCooktopIndex = clampModuleIndex(input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex);
+  const normalizedHoodIndex =
+    input.productType === "kitchen_full_set" &&
+    input.hood_option &&
+    input.hood_option !== "none" &&
+    input.cooktop_option &&
+    input.cooktop_option !== "none"
+      ? normalizedCooktopIndex
+      : clampModuleIndex(input.hood_module_index ?? input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex);
 
   // ── 설비 규격 자동 맞춤 — 싱크볼(780→800/그 외 900)·쿡탑(≥600)·후드(스펙 폭+여유)·전자레인지장(≥600)이
   //    배치된 칸은 그 규격에 맞게 폭을 자동 확장한다(장이 설비에 맞춰 만들어지는 실제 제작 규칙). ──
@@ -1845,8 +1890,8 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
       if (arr[idx] != null && arr[idx] < minMm) arr[idx] = minMm;
     };
     const sinkIdx = clampModuleIndex(input.sink_module_index ?? defaultSinkIndex, maxModuleIndex);
-    const cooktopIdx = clampModuleIndex(input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex);
-    const hoodIdx = clampModuleIndex(input.hood_module_index ?? input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex);
+    const cooktopIdx = normalizedCooktopIndex;
+    const hoodIdx = normalizedHoodIndex;
     const microIdx = clampModuleIndex(input.microwave_module_index ?? maxModuleIndex, maxModuleIndex);
     if (input.sink_option && input.sink_option !== "none") {
       const minW = getSinkMinCabinetWidthMm(input.sink_option); // 검증 룰과 동일 기준(더블 950 등)
@@ -1925,8 +1970,8 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
     drawer_module_count: moduleTypeCounts ? moduleTypeCounts.drawer : Math.max(0, Math.floor(input.drawer_module_count ?? 0)),
     pullout_module_count: moduleTypeCounts ? moduleTypeCounts.pullout : Math.max(0, Math.floor(input.pullout_module_count ?? 0)),
     sink_module_index: clampModuleIndex(input.sink_module_index ?? defaultSinkIndex, maxModuleIndex),
-    cooktop_module_index: clampModuleIndex(input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex),
-    hood_module_index: clampModuleIndex(input.hood_module_index ?? input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex),
+    cooktop_module_index: normalizedCooktopIndex,
+    hood_module_index: normalizedHoodIndex,
     microwave_module_index: clampModuleIndex(input.microwave_module_index ?? maxModuleIndex, maxModuleIndex),
     door_style: input.door_style ?? "flat",
     door_swing: input.door_swing ?? "pair",

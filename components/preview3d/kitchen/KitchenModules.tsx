@@ -148,6 +148,19 @@ function AnimatedDrawerStack({
                 color={material.edge}
               />
             )}
+            <Trim
+              size={[width * 0.82, 0.012, depth * 0.42]}
+              position={[0, -faceHeight * 0.02, -depth * 0.2]}
+              color={lighten(material.color)}
+            />
+            {[-1, 1].map((side) => (
+              <Trim
+                key={`rail-${side}`}
+                size={[0.014, 0.014, depth * 0.46]}
+                position={[side * width * 0.41, -faceHeight * 0.02, -depth * 0.2]}
+                color="#94a3b8"
+              />
+            ))}
             {active && (
               <Trim
                 size={[width * 0.82, 0.012, depth * 0.32]}
@@ -197,7 +210,7 @@ const APPLIANCE_DARK = "#222a33";
 const APPLIANCE_GLASS = "#0e1722";
 const APPLIANCE_METAL = "#aeb6bf";
 
-/** 싱크장 — 카운터 위 싱크볼 + 수전 (하부엔 도어) */
+/** 싱크장 — 카운터 위 싱크볼 (수전은 KitchenFixtures의 실제 옵션 1개만 렌더) */
 function SinkBowl({ width, height, depth }: { width: number; height: number; depth: number }) {
   const topY = height + 0.012;
   const bw = Math.min(width * 0.66, 0.56);
@@ -211,14 +224,6 @@ function SinkBowl({ width, height, depth }: { width: number; height: number; dep
       <mesh position={[0, topY, 0.02]}>
         <boxGeometry args={[bw + 0.03, 0.014, bd + 0.03]} />
         <meshStandardMaterial color="#cbd5e1" metalness={0.6} roughness={0.3} />
-      </mesh>
-      <mesh position={[0, topY + 0.11, -bd * 0.34]}>
-        <cylinderGeometry args={[0.013, 0.013, 0.22, 12]} />
-        <meshStandardMaterial color={APPLIANCE_METAL} metalness={0.85} roughness={0.18} />
-      </mesh>
-      <mesh position={[0, topY + 0.2, -bd * 0.2]} rotation={[Math.PI / 2.3, 0, 0]}>
-        <cylinderGeometry args={[0.012, 0.012, 0.16, 12]} />
-        <meshStandardMaterial color={APPLIANCE_METAL} metalness={0.85} roughness={0.18} />
       </mesh>
     </group>
   );

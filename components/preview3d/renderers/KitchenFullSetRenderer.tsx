@@ -1259,7 +1259,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
           doorStyle={doorStyle}
           showHandles={handleOn && !noHandleWall.has(index)}
           shelfCount={input.kitchen_wall_shelf_counts?.[index] ?? 1}
-          hideDoor={hood.id !== "none" && index === hoodModuleIndex}
+          hideDoor={hoodReplacesCabinet && index === hoodModuleIndex}
           viewMode={viewMode}
           selected={!hasSelectedFixture && selectedModuleIndex === index && selectedModulePart === "wall"}
           selectedTarget={selectedEditTarget}

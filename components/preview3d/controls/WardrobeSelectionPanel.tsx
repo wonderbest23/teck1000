@@ -162,6 +162,20 @@ export function WardrobeSelectionPanel({
           ))}
         </Section>
 
+        {sliding && (
+          <Section title="슬라이딩 열림 방향">
+            {(["left", "right"] as const).map((direction) => (
+              <Chip
+                key={direction}
+                active={(input.door_swing ?? "right") === direction}
+                onClick={() => onChange({ door_swing: direction })}
+              >
+                {direction === "left" ? "좌측 열림" : "우측 열림"}
+              </Chip>
+            ))}
+          </Section>
+        )}
+
         <Section title="문짝 디자인 (전체)">
           {onDoorStyleChange &&
             (Object.entries(doorStyleLabels) as [DoorStyle, string][]).map(([style, label]) => (

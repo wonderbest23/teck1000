@@ -785,6 +785,21 @@ export function RoomScene({
                 )}
               </div>
             )}
+            {isSliding && (
+              <div className="flex items-center gap-1">
+                <span className="w-8 shrink-0 text-[10px] font-black text-slate-500">열림</span>
+                {([["left", "좌측 열림"], ["right", "우측 열림"]] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => patchItem({ door_swing: id })}
+                    className={`flex-1 rounded-lg px-1.5 py-1.5 text-[10px] font-black transition ${(sInput.door_swing ?? "right") === id ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* 서랍통 사양 — 서랍이 있을 때만 */}
             {isStorage && storageDrawerCount > 0 && (
               <div className="flex items-center gap-1">

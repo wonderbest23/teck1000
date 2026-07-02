@@ -144,6 +144,7 @@ export function ShelfRenderer({
             doorStyle={doorStyle}
             viewMode={viewMode}
             open={openAll}
+            openDirection={(input.door_swing ?? "right") === "left" ? "left" : "right"}
           />
         </group>
       )}

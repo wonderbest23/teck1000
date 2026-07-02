@@ -143,6 +143,20 @@ export function StorageSelectionPanel({
           </Section>
         )}
 
+        {(input.open_type?.includes("슬라이딩") ?? false) && (
+          <Section title="슬라이딩 열림 방향">
+            {(["left", "right"] as const).map((direction) => (
+              <Chip
+                key={direction}
+                active={(input.door_swing ?? "right") === direction}
+                onClick={() => onChange({ door_swing: direction })}
+              >
+                {direction === "left" ? "좌측 열림" : "우측 열림"}
+              </Chip>
+            ))}
+          </Section>
+        )}
+
         {isShoe && (
           <Section title="신발장 옵션">
             <Chip active={Boolean(input.shoe_shelf_angle)} onClick={() => onChange({ shoe_shelf_angle: !input.shoe_shelf_angle })}>
