@@ -73,7 +73,7 @@ function HighlightBox({ centerY, w, h, d }: { centerY: number; w: number; h: num
 }
 
 function ResizeHandle({ position, label, dir, onStart }: { position: [number, number, number]; label: string; dir: "h" | "v"; onStart: (e: { stopPropagation: () => void; clientX: number; clientY: number }) => void }) {
-  const factor = useHandleFactor(6);
+  const factor = useHandleFactor(5);
   return (
     <Html position={position} center distanceFactor={factor} zIndexRange={[40, 30]}>
       <button
@@ -134,7 +134,7 @@ function DraggableItem({
     () => ({ plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ray: new THREE.Raycaster(), v2: new THREE.Vector2(), hit: new THREE.Vector3() }),
     [],
   );
-  const moveFactor = useHandleFactor(6);
+  const moveFactor = useHandleFactor(5);
   const Renderer = getPreviewRenderer(item.input.productType);
   if (!Renderer) return null;
 
@@ -286,8 +286,8 @@ function DraggableItem({
             <boxGeometry args={[footprint.widthM * 1.02, boxHeight * 1.02, footprint.depthM * 1.04]} />
             <meshBasicMaterial color="#06b6d4" wireframe transparent opacity={0.9} depthTest={false} />
           </mesh>
-          {/* 이동 핸들 — 레이어 중앙. 이 동그라미를 끌어야만 움직인다 */}
-          <Html position={[0, centerY, 0]} center distanceFactor={moveFactor} zIndexRange={[40, 30]}>
+          {/* 이동 핸들 — 가구 좌상단 모서리 위(몸체·상세 UI를 가리지 않게 구석 + 작게). 이 동그라미를 끌어야만 움직인다 */}
+          <Html position={[-footprint.widthM / 2, topY + 0.12, 0]} center distanceFactor={moveFactor} zIndexRange={[40, 30]}>
             <button
               type="button"
               title="드래그해서 이동"
@@ -297,9 +297,9 @@ function DraggableItem({
                 startHandleDrag(e);
               }}
               onClick={(e) => e.stopPropagation()}
-              className="grid h-12 w-12 cursor-grab touch-none place-items-center rounded-full bg-cyan-600 text-white shadow-xl ring-4 ring-white/90 active:cursor-grabbing"
+              className="grid h-9 w-9 cursor-grab touch-none place-items-center rounded-full bg-cyan-600 text-white shadow-lg ring-2 ring-white/90 active:cursor-grabbing"
             >
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 3v18M3 12h18" />
                 <path d="M12 3l-2.4 2.4M12 3l2.4 2.4M12 21l-2.4-2.4M12 21l2.4-2.4M3 12l2.4-2.4M3 12l2.4 2.4M21 12l-2.4-2.4M21 12l2.4 2.4" />
               </svg>
@@ -587,9 +587,19 @@ export function RoomScene({
     } else if (moduleIdx !== null) {
       const layerMods = partSel === "wall" ? ki.kitchen_wall_modules_mm : ki.kitchen_base_modules_mm;
       const moduleWidthMm = Math.round(layerMods?.[moduleIdx] ?? ki.kitchen_modules_mm?.[moduleIdx] ?? KITCHEN_STANDARDS.defaultModuleWidthMm);
+      // 3D 인라인 카드(SizeBadge)를 embedded에선 숨겼으므로 그 기능(선반/서랍 단수)을 패널 rows로 흡수
+      const moduleType = partSel === "wall" ? "door" : (kEditor.kitchenLayout?.moduleTypes[moduleIdx] ?? "door");
+      const isDrawerModule = partSel === "base" && moduleType === "drawer";
+      const shelfCount = Math.round((partSel === "wall" ? ki.kitchen_wall_shelf_counts?.[moduleIdx] : ki.kitchen_base_shelf_counts?.[moduleIdx]) ?? 1);
+      const drawerCount = Math.round(ki.kitchen_drawer_counts?.[moduleIdx] ?? 3);
       groups.push({
-        heading: `${moduleIdx + 1}번 칸 폭`,
-        rows: [{ key: "module-width", label: "폭", value: moduleWidthMm, min: 150, max: 1000, step: 50, onChange: (mm) => kEditor.updateSelectedModuleWidth(mm, partSel) }],
+        heading: `${moduleIdx + 1}번 칸`,
+        rows: [
+          { key: "module-width", label: "폭", value: moduleWidthMm, min: 150, max: 1000, step: 50, onChange: (mm) => kEditor.updateSelectedModuleWidth(mm, partSel) },
+          isDrawerModule
+            ? { key: "module-drawer", label: "서랍", value: drawerCount, min: 1, max: 3, step: 1, onChange: (n) => kEditor.updateSelectedDrawerCount(n) }
+            : { key: "module-shelf", label: "선반", value: shelfCount, min: 0, max: 8, step: 1, onChange: (n) => kEditor.updateSelectedShelfCount(n, partSel) },
+        ],
       });
     }
     groups.push({
@@ -627,20 +637,74 @@ export function RoomScene({
           else onSelect(null);
         }}
       >
-        {moduleIdx !== null && (
-          <div className="flex gap-1">
-            {([["base", "하부장"], ["wall", "상부장"]] as const).map(([part, label]) => (
-              <button
-                key={part}
-                type="button"
-                onClick={() => setPartSel(part)}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-black transition ${partSel === part ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
+        {moduleIdx !== null && (() => {
+          const moduleType = partSel === "wall" ? "door" : (kEditor.kitchenLayout?.moduleTypes[moduleIdx] ?? "door");
+          const showSwing = partSel === "wall" || ["door", "sink_base"].includes(moduleType);
+          const swing = (partSel === "wall" ? ki.kitchen_wall_door_swings?.[moduleIdx] ?? ki.kitchen_door_swings?.[moduleIdx] : ki.kitchen_door_swings?.[moduleIdx]) ?? "pair";
+          const noHandleSet = (partSel === "wall" ? ki.kitchen_wall_no_handle_indices : ki.kitchen_no_handle_indices) ?? [];
+          const hasHandle = !noHandleSet.includes(moduleIdx);
+          return (
+            <div className="space-y-1.5">
+              <div className="flex gap-1">
+                {([["base", "하부장"], ["wall", "상부장"]] as const).map(([part, label]) => (
+                  <button
+                    key={part}
+                    type="button"
+                    onClick={() => setPartSel(part)}
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-black transition ${partSel === part ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {showSwing && (
+                <div className="flex items-center gap-1">
+                  <span className="w-8 shrink-0 text-[10px] font-black text-slate-500">문</span>
+                  {([["pair", "2짝"], ["left", "좌개"], ["right", "우개"]] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => kEditor.updateSelectedDoorSwing(id, partSel)}
+                      className={`flex-1 rounded-lg px-1.5 py-1.5 text-[10px] font-black transition ${swing === id ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <span className="w-8 shrink-0 text-[10px] font-black text-slate-500">손잡이</span>
+                {([[true, "있음"], [false, "없음"]] as const).map(([value, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => kitchenInteractive?.onHandleChange?.(value)}
+                    className={`flex-1 rounded-lg px-1.5 py-1.5 text-[10px] font-black transition ${hasHandle === value ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => kEditor.addKitchenModule(partSel, "right")}
+                  className="flex-1 rounded-lg bg-emerald-500 px-2 py-1.5 text-[10px] font-black text-white transition hover:bg-emerald-400"
+                >
+                  ＋ 칸 추가
+                </button>
+                <button
+                  type="button"
+                  disabled={moduleCount <= 1}
+                  onClick={() => kEditor.removeSelectedModule(partSel)}
+                  className="flex-1 rounded-lg bg-rose-50 px-2 py-1.5 text-[10px] font-black text-rose-600 ring-1 ring-rose-200 transition hover:bg-rose-100 disabled:opacity-35"
+                >
+                  − 칸 삭제
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </SceneSizePanel>
     );
   } else if (editable && selectedItem) {

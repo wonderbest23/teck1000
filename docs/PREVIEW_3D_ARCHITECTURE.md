@@ -49,7 +49,9 @@ FurnitureInput (lib/types.ts)   ← 하나의 설계 상태 객체
 >
 > **패널 알림(PanelNotice)**: 선택 가구가 주문 불가/주의면 사유를 패널 상단에 표시(`validateOrderInput` 결과 중 `missing_input` 제외 — 필수 입력 안내는 하단 CTA·검수 탭 몫). 이슈 코드별 **원클릭 해결**(`ISSUE_QUICK_FIXES` in QuoteBuilder: MISSING_BASE_SUPPORT→걸레받이 추가 등) + 규격(productRules) 이탈 시 "권장값으로 맞추기"(주방 세트는 kitchen_base_height/depth도 함께 보정해야 normalizeInput에 안 덮인다). **모바일(<640px)에선 패널·가구추가 시트가 미리보기를 가리지 않게 섹션 아래(belowCanvas)로 내려간다** — 사이즈 패널은 QuoteBuilder가 host div를 만들고 RoomScene이 `mobilePanelHost`로 받아 `createPortal`로 inline variant를 렌더(데스크톱 overlay variant는 `max-sm:hidden`). 가구추가 시트 내용(`addSheetBody`)은 데스크톱 플로팅(반투명)과 모바일 belowCanvas 카드가 공유.
 >
-> RoomScene도 ㄱ자 **측면 다리 칸 편집** 지원(선택/폭/추가/삭제 — Preview3D와 동일한 렌더러 계약, `sideSel` 상태는 메인 칸 선택과 상호 배타). 푸터 상태 표기는 주문 검증 verdict(`ORDER_VERDICT_LABELS`) 기준으로 CTA와 통일. 상단 카테고리에서 '소재' 제거(패널 스와치로 대체).
+> RoomScene도 ㄱ자 **측면 다리 칸 편집** 지원(선택/폭/추가/삭제 — Preview3D와 동일한 렌더러 계약, `sideSel` 상태는 메인 칸 선택과 상호 배타).
+>
+> **오버레이 정리(RoomScene)**: 이동 핸들은 가구 중앙 대형 원 → **좌상단 모서리 작은 버튼**(h-9, factor 5). 칸 선택 시 3D 안에 뜨던 검은 인라인 카드(`SizeBadge`)는 `embedded`(방 배치 뷰)에서 숨김 — 그 기능(폭·선반/서랍 단수·문 방향·손잡이·칸 추가/삭제)은 전부 조절 패널의 칸 섹션으로 통합. Preview3D(관리자 스튜디오)에선 SizeBadge 유지. 푸터 상태 표기는 주문 검증 verdict(`ORDER_VERDICT_LABELS`) 기준으로 CTA와 통일. 상단 카테고리에서 '소재' 제거(패널 스와치로 대체).
 >
 > **벽부착 제약(현실 규칙)**: 싱크대·붙박이장 등 `WALL_BOUND_TYPES`(QuoteBuilder)는 벽에서 떨어질 수 없다 — 이동하면 `projectToWall`로 가장 가까운 벽에 등을 붙이고(rotY 자동), 옆벽으로 끌면 자동 회전. 회전 버튼은 "다음 벽으로 이동"(뒤→오른쪽→앞→왼쪽 순환). 아일랜드(kitchen_island)만 방 중앙 허용. 배치가 바뀌면 350ms 디바운스 후 카메라 프레임이 따라잡는다(RoomScene `placementsSig`).
 | `components/QuoteBuilder.tsx` | 고객 구성 화면. Preview3D / RoomScene 사용 |

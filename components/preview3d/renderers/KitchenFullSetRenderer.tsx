@@ -1306,8 +1306,9 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
               onDown={selectedModulePart === "wall" && onWallVerticalMove ? () => onWallVerticalMove(selectedIndex, -50) : undefined}
             />
           )}
-          {/* 선택한 칸 바로 위에 뜨는 인라인 편집 — 치수·단수·＋칸추가·삭제 (하단 도크 대체) */}
-          <SizeBadge
+          {/* 선택한 칸 바로 위에 뜨는 인라인 편집 — 치수·단수·＋칸추가·삭제 (하단 도크 대체).
+              embedded(방 배치 뷰)에선 숨김 — 우측/하단 조절 패널이 같은 기능을 담당해 겹침 없이 편집 */}
+          {!embedded && <SizeBadge
             x={selHighlightX}
             y={selectedSizeY}
             z={selectedSizeZ}
@@ -1332,7 +1333,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
             onAdd={onAddModule}
             onRemove={onRemoveModule}
             canRemove={modules.length > 1}
-          />
+          />}
         </>
       )}
       {feedback && feedbackIndex !== null && (
