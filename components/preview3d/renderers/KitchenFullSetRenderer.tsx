@@ -1391,7 +1391,8 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
           }
         />
       )}
-      {cooktop.id !== "none" && (
+      {/* 프리스탠딩 레인지(가스대)는 모듈이 GasRangeUnit을 렌더 — 빌트인 쿡탑 픽스처 중복 방지 */}
+      {cooktop.id !== "none" && cooktop.id !== "free_standing_range" && (
         <CooktopFixture
           x={cooktopX}
           counterTopY={counterTopY}
