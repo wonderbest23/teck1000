@@ -1026,6 +1026,9 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
   const baseFloorY = KITCHEN_TOE_KICK_M;
   const counterTopY = baseFloorY + baseHeightM;
   const upperBottomY = KITCHEN_WALL_BOTTOM_M;
+  // 후드(슬라이드) 칸의 상부장은 후드장(짧은 장)으로 — 위로 당겨 윗선을 옆 장과 맞추고, 후드는 그 아래.
+  // 렌더러가 기하로 강제하므로 후드와 장이 어긋나는 조합 자체가 불가능하다.
+  const hoodLiftM = hood.id !== "none" && !hoodReplacesCabinet ? Math.min(0.2, wallHeightM * 0.3) : 0;
 
   const draggingItemKey = activeDragTarget?.type === "item" ? activeDragTarget.itemKey : null;
   const draggingModuleIndex = activeDragTarget?.type === "module" ? activeDragTarget.moduleIndex : null;
@@ -1256,10 +1259,10 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
         <KitchenWallModule
           key={`wall-${moduleWidth}-${index}`}
           width={moduleWidth / 1000}
-          height={wallHeightM}
+          height={index === hoodModuleIndex && hoodLiftM > 0 ? wallHeightM - hoodLiftM : wallHeightM}
           depth={wallDepthM}
           x={draggingModuleIndex === index && draggingModulePart === "wall" && draggedWallModuleX !== null ? draggedWallModuleX : getModuleCenterX(wallModules, index)}
-          y={KITCHEN_WALL_BOTTOM_M + wallOffsetM(index)}
+          y={KITCHEN_WALL_BOTTOM_M + wallOffsetM(index) + (index === hoodModuleIndex && hoodLiftM > 0 ? hoodLiftM : 0)}
           material={material}
           doorStyle={doorStyle}
           showHandles={handleOn && !noHandleWall.has(index)}
@@ -1426,7 +1429,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
         <group position={[0, 0, wallBackZ]}>
         <HoodFixture
           x={hoodX}
-          upperBottomY={upperBottomY}
+          upperBottomY={upperBottomY + hoodLiftM + wallOffsetM(hoodModuleIndex)}
           selected={selectedHood}
           widthM={getHoodSpec(input.hood_option).widthMm / 1000}
           shape={getHoodSpec(input.hood_option).shape}
