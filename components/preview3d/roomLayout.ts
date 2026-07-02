@@ -35,7 +35,10 @@ export function getFootprint(input: FurnitureInput): Footprint {
   }
   const h = Math.max(input.height_mm, 300) / 1000;
   // 상부장은 벽 설치 높이, 신발장은 하부 띄움만큼 바닥이 올라간다
-  const baseY = input.productType === "kitchen_wall_cabinet" ? KITCHEN_WALL_BOTTOM_M : (input.bottom_space ?? 0) / 1000;
+  // 상부장 단품 — 표준 상부장 '윗선'(설치높이+800)에 상단을 맞춰 건다: 후드장(H600)은 아래가 올라가 후드 공간 확보
+  const baseY = input.productType === "kitchen_wall_cabinet"
+    ? KITCHEN_WALL_BOTTOM_M + Math.max(0, 0.8 - h)
+    : (input.bottom_space ?? 0) / 1000;
   return {
     widthM: Math.max(input.width_mm, 200) / 1000,
     depthM: Math.max(input.depth_mm, 150) / 1000,

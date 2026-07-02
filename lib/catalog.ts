@@ -74,7 +74,7 @@ export const productLabels: Partial<Record<ProductType, string>> = {
 };
 
 /** 내 공간에 추가할 때 한 번 더 고르는 표준 규격(폭 기준). 없는 제품은 기본값으로 바로 추가. */
-export type RoomAddPreset = { label: string; width_mm: number; height_mm: number; depth_mm: number };
+export type RoomAddPreset = { label: string; width_mm: number; height_mm: number; depth_mm: number; hood_option?: string };
 export const roomAddPresets: Partial<Record<ProductType, RoomAddPreset[]>> = {
   desk: [
     { label: "1200", width_mm: 1200, height_mm: 740, depth_mm: 600 },
@@ -109,7 +109,7 @@ export const roomAddPresets: Partial<Record<ProductType, RoomAddPreset[]>> = {
     { label: "1000", width_mm: 1000, height_mm: 800, depth_mm: 320 },
     { label: "1100", width_mm: 1100, height_mm: 800, depth_mm: 320 },
     { label: "1200", width_mm: 1200, height_mm: 800, depth_mm: 320 },
-    { label: "후드장 600", width_mm: 600, height_mm: 600, depth_mm: 320 },
+    { label: "후드장 600", width_mm: 600, height_mm: 600, depth_mm: 320, hood_option: "haatz_slide_600" },
   ],
   kitchen_island: [
     { label: "1200", width_mm: 1200, height_mm: 850, depth_mm: 700 },

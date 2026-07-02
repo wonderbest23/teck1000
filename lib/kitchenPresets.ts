@@ -12,6 +12,7 @@
 import type { KitchenModuleType } from "@/lib/kitchen";
 
 export type KitchenPresetId =
+  | "straight_2400_gas"
   | "straight_1800"
   | "straight_2400"
   | "straight_2700"
@@ -31,6 +32,11 @@ export interface KitchenPresetInput {
   sink_module_index: number;
   cooktop_module_index: number;
   hood_module_index: number;
+  /** 설비 옵션 — 프리셋에 기본 설비 포함(가스대형 등) */
+  sink_option?: string;
+  faucet_option?: string;
+  cooktop_option?: string;
+  hood_option?: string;
 }
 
 export interface KitchenPreset {
@@ -49,6 +55,26 @@ export interface KitchenPreset {
 // -------------------------------------------------------------
 
 export const KITCHEN_PRESETS: KitchenPreset[] = [
+  {
+    // 제일 잘 팔리는 표준형 — 개수대 + 낮은 가스대(프리스탠딩 레인지) + 후드 포함
+    id: "straight_2400_gas",
+    label: "일자 2400 가스대형",
+    description: "표준 인기 구성 · 1200 개수대 + 600 수납 + 600 낮은 가스대(레인지) · 후드 포함",
+    totalWidthMm: 2400,
+    shape: "straight",
+    input: {
+      kitchen_layout_shape: "straight",
+      kitchen_modules_mm: [1200, 600, 600],
+      kitchen_module_types: ["sink_base", "door", "gas"],
+      sink_module_index: 0,
+      cooktop_module_index: 2,
+      hood_module_index: 2,
+      sink_option: "single_780",
+      faucet_option: "basic_cobra",
+      cooktop_option: "free_standing_range",
+      hood_option: "haatz_slide_600",
+    },
+  },
   {
     id: "straight_1800",
     label: "일자 1800",

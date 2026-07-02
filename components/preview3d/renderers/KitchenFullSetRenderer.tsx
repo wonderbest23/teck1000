@@ -1304,6 +1304,10 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
               return { x: sinkX, w: s.widthM + 0.004, d: s.depthM + 0.004, z: 0.06 };
             })()
           : null;
+        // 가스대(프리스탠딩 레인지) 구간은 상판이 아예 끊긴다 — 실제 시공과 동일
+        const gasGaps = moduleTypes
+          .map((t, i) => (t === "gas" ? { x: getModuleCenterX(baseModules, i), w: (baseModules[i] ?? modules[i]) / 1000 } : null))
+          .filter((g): g is { x: number; w: number } => g !== null);
         return (
           <CountertopWithCutout
             width={w * 0.98}
@@ -1312,6 +1316,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
             z={0.02}
             color={countertop.id === "stainless" ? "#94a3b8" : "#e5e7eb"}
             cutout={sinkCut}
+            gaps={gasGaps}
           />
         );
       })()}

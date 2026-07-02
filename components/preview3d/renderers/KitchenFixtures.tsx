@@ -37,41 +37,60 @@ export function CountertopWithCutout({
   z = 0.02,
   color,
   cutout,
+  gaps = [],
 }: {
   width: number;
   depth: number;
   y: number;
   z?: number;
   color: string;
-  /** 컷아웃 사각형(월드 x 중심/개구 크기/z 중심). 없으면 통짜 슬랩 */
+  /** 싱크 컷아웃(부분 구멍) */
   cutout?: { x: number; w: number; d: number; z: number } | null;
+  /** 상판이 아예 끊기는 구간(가스대 등 — 전체 깊이) */
+  gaps?: Array<{ x: number; w: number }>;
 }) {
   const yMid = y + KITCHEN_COUNTERTOP_M / 2;
   const left = -width / 2;
   const right = width / 2;
   const back = z - depth / 2;
   const front = z + depth / 2;
-  const valid =
-    cutout &&
-    cutout.x - cutout.w / 2 > left + 0.01 &&
-    cutout.x + cutout.w / 2 < right - 0.01 &&
-    cutout.z - cutout.d / 2 > back + 0.005 &&
-    cutout.z + cutout.d / 2 < front - 0.005;
-  if (!cutout || !valid) {
-    return <Trim size={[width, KITCHEN_COUNTERTOP_M, depth]} position={[0, yMid, z]} color={color} />;
+  // 가스대 구간으로 X 세그먼트 분할
+  const sorted = [...gaps].sort((a, b) => a.x - b.x).filter((g) => g.x + g.w / 2 > left && g.x - g.w / 2 < right);
+  const segments: Array<[number, number]> = [];
+  let cursor = left;
+  for (const gap of sorted) {
+    const gl = Math.max(left, gap.x - gap.w / 2);
+    const gr = Math.min(right, gap.x + gap.w / 2);
+    if (gl - cursor > 0.01) segments.push([cursor, gl]);
+    cursor = Math.max(cursor, gr);
   }
-  const cl = cutout.x - cutout.w / 2;
-  const cr = cutout.x + cutout.w / 2;
-  const cb = cutout.z - cutout.d / 2;
-  const cf = cutout.z + cutout.d / 2;
+  if (right - cursor > 0.01) segments.push([cursor, right]);
+  if (segments.length === 0) return null;
   return (
     <group>
-      {/* 좌/우 통판 */}
-      <Trim size={[cl - left, KITCHEN_COUNTERTOP_M, depth]} position={[(left + cl) / 2, yMid, z]} color={color} />
-      <Trim size={[right - cr, KITCHEN_COUNTERTOP_M, depth]} position={[(cr + right) / 2, yMid, z]} color={color} />
-      {/* 컷아웃 앞/뒤 스트립 */}
-      <Trim size={[cutout.w, KITCHEN_COUNTERTOP_M, cf - cb > 0 ? cb - back : 0.01]} position={[cutout.x, yMid, (back + cb) / 2]} color={color} />
-      <Trim size={[cutout.w, KITCHEN_COUNTERTOP_M, front - cf]} position={[cutout.x, yMid, (cf + front) / 2]} color={color} />
+      {segments.map(([a, b], index) => {
+        const hasSink =
+          cutout &&
+          cutout.x - cutout.w / 2 > a + 0.01 &&
+          cutout.x + cutout.w / 2 < b - 0.01 &&
+          cutout.z - cutout.d / 2 > back + 0.005 &&
+          cutout.z + cutout.d / 2 < front - 0.005;
+        if (!hasSink || !cutout) {
+          return <Trim key={`seg-${index}`} size={[b - a, KITCHEN_COUNTERTOP_M, depth]} position={[(a + b) / 2, yMid, z]} color={color} />;
+        }
+        const cl = cutout.x - cutout.w / 2;
+        const cr = cutout.x + cutout.w / 2;
+        const cb = cutout.z - cutout.d / 2;
+        const cf = cutout.z + cutout.d / 2;
+        return (
+          <group key={`seg-${index}`}>
+            <Trim size={[cl - a, KITCHEN_COUNTERTOP_M, depth]} position={[(a + cl) / 2, yMid, z]} color={color} />
+            <Trim size={[b - cr, KITCHEN_COUNTERTOP_M, depth]} position={[(cr + b) / 2, yMid, z]} color={color} />
+            <Trim size={[cutout.w, KITCHEN_COUNTERTOP_M, cb - back]} position={[cutout.x, yMid, (back + cb) / 2]} color={color} />
+            <Trim size={[cutout.w, KITCHEN_COUNTERTOP_M, front - cf]} position={[cutout.x, yMid, (cf + front) / 2]} color={color} />
+          </group>
+        );
+      })}
     </group>
   );
 }

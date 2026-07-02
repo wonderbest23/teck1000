@@ -860,7 +860,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   }
 
   // IKEA식 — 가구를 '내 공간'에 바로 추가(이동 없음). 기본 구성으로 방에 등장.
-  function addFurnitureToRoom(slug: ProductType, overrides?: Pick<RoomAction, "material" | "door_style" | "width_mm" | "height_mm" | "depth_mm">) {
+  function addFurnitureToRoom(slug: ProductType, overrides?: Pick<RoomAction, "material" | "door_style" | "width_mm" | "height_mm" | "depth_mm"> & { hood_option?: string }) {
     const label = productLabels[slug] ?? getProduct(slug)?.name ?? slug;
     let nextInput = getInitialInput(slug);
     if (overrides) {
@@ -869,6 +869,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       if (overrides.height_mm) draft.height_mm = overrides.height_mm;
       if (overrides.depth_mm) draft.depth_mm = overrides.depth_mm;
       if (overrides.door_style) draft.door_style = overrides.door_style;
+      if (overrides.hood_option) draft.hood_option = overrides.hood_option; // 후드장 프리셋 — 장 아래 후드 포함
       if (overrides.material) {
         const m = materials.find((x) => x.name === overrides.material);
         if (m) { draft.material = m.name; draft.color = m.color; }
@@ -1188,7 +1189,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   // 단, 상부장 단품의 fixtures는 소비자용 추가 옵션(EP 판넬·후드 타공·부속)이라 간편 모드에서도 노출.
   // 소재는 미리보기 우측 패널로, 검수·주문은 하단 CTA(주문 버튼)로 이동 — 상단 카테고리 버튼 수를 줄인다.
   const categories = getEditorCategories(activeInput.productType, isPro).filter(
-    (c) => (isPro || c.id !== "fixtures" || activeInput.productType === "kitchen_wall_cabinet") && c.id !== "material" && c.id !== "check",
+    (c) => (isPro || c.id !== "fixtures" || activeInput.productType.startsWith("kitchen")) && c.id !== "material" && c.id !== "check",
   );
   // effectiveCat: 데스크톱 2분할 패널이 항상 표시할 칸(미선택 시 첫 칸). 모바일 팝업은 activeCat != null일 때만 뜬다.
   const effectiveCat = activeCat ?? categories[0]?.id ?? null;
@@ -1446,7 +1447,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                   <button
                     key={preset.label}
                     type="button"
-                    onClick={() => addFurnitureToRoom(pickerSlug, { width_mm: preset.width_mm, height_mm: preset.height_mm, depth_mm: preset.depth_mm })}
+                    onClick={() => addFurnitureToRoom(pickerSlug, { width_mm: preset.width_mm, height_mm: preset.height_mm, depth_mm: preset.depth_mm, hood_option: preset.hood_option })}
                     className="rounded-lg bg-white px-3 py-2 text-[12px] font-black text-slate-700 ring-1 ring-slate-200 transition hover:ring-brand active:scale-95"
                   >
                     폭 {preset.label}mm

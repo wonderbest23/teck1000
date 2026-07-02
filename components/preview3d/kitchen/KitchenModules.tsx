@@ -275,6 +275,45 @@ function SinkBowl({ width, height, depth }: { width: number; height: number; dep
   );
 }
 
+/** 프리스탠딩 가스레인지 — 낮은 가스대 위에 올라앉는 레인지 본체(3구+조작부) */
+function GasRangeUnit({ width, depth, baseY }: { width: number; depth: number; baseY: number }) {
+  const w = Math.min(width * 0.94, 0.58);
+  const d = depth * 0.82;
+  const h = 0.15;
+  return (
+    <group position={[0, baseY, 0.01]}>
+      <mesh position={[0, h / 2, 0]}>
+        <boxGeometry args={[w, h, d]} />
+        <meshStandardMaterial color="#1c2127" metalness={0.4} roughness={0.5} />
+      </mesh>
+      {/* 상판 그릴/버너 3구 */}
+      {[-w * 0.3, 0, w * 0.3].map((bx, i) => (
+        <group key={`gr-burner-${i}`} position={[bx, h + 0.004, 0]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.05, 0.006, 8, 20]} />
+            <meshStandardMaterial color="#3a424b" metalness={0.5} roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.02, 0.024, 0.01, 16]} />
+            <meshStandardMaterial color="#4b545e" metalness={0.55} roughness={0.45} />
+          </mesh>
+        </group>
+      ))}
+      {/* 전면 조작부(노브) */}
+      <mesh position={[0, h * 0.35, d / 2 + 0.006]}>
+        <boxGeometry args={[w * 0.96, h * 0.4, 0.01]} />
+        <meshStandardMaterial color="#2b323a" metalness={0.45} roughness={0.45} />
+      </mesh>
+      {[-w * 0.3, -w * 0.1, w * 0.1, w * 0.3].map((kx, i) => (
+        <mesh key={`gr-knob-${i}`} position={[kx, h * 0.35, d / 2 + 0.014]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.012, 0.012, 0.012, 12]} />
+          <meshStandardMaterial color="#9aa2ab" metalness={0.6} roughness={0.35} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 /** 쿡탑장/가스장 — 카운터 위 상판 + 화구 (하부엔 서랍) */
 function CooktopTop({ width, height, depth, gas }: { width: number; height: number; depth: number; gas: boolean }) {
   const topY = height + 0.016;
@@ -605,7 +644,7 @@ export function KitchenBaseModule({
       <group position={[0, bodyOffsetY, 0]}>
         <SimpleCabinet
           width={width}
-          height={height}
+          height={moduleType === "gas" ? Math.max(height - 0.15, 0.3) : height}
           depth={depth}
           shelfCount={Math.max(0, shelfCount)}
           doorCount={resolvedDoorCount}
@@ -647,10 +686,17 @@ export function KitchenBaseModule({
           <AnimatedOpenShelfCue width={width} height={height} depth={depth} material={material} active={openAll} />
         )}
         {/* 쿡탑·가스장: 하부 서랍 + 카운터 위 상판/화구 */}
-        {(moduleType === "cooktop" || moduleType === "gas") && (
+        {moduleType === "cooktop" && (
           <>
             <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={2} active={animateDrawers} mode="drawer" showHandles={showHandles} revealInterior={revealInterior} />
-            <CooktopTop width={width} height={height} depth={depth} gas={moduleType === "gas"} />
+            <CooktopTop width={width} height={height} depth={depth} gas={false} />
+          </>
+        )}
+        {/* 가스대 — 옆 장보다 150mm 낮은 장 위에 프리스탠딩 가스레인지(상판 없음 구간). 쿡탑일 때만 동일 높이 */}
+        {moduleType === "gas" && (
+          <>
+            <AnimatedDrawerStack width={width} height={Math.max(height - 0.15, 0.3)} depth={depth} material={material} count={2} active={animateDrawers} mode="drawer" showHandles={showHandles} revealInterior={revealInterior} />
+            <GasRangeUnit width={width} depth={depth} baseY={Math.max(height - 0.15, 0.3)} />
           </>
         )}
         {moduleType === "oven" && <OvenFront width={width} height={height} depth={depth} />}
