@@ -274,11 +274,8 @@ function MeasurementSection({
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
+          {/* 수전/배수/가스/콘센트 위치는 현장 시공기사가 해결 — 제작에 필요한 벽 길이만 받는다 */}
           <NumberInput label="설치 벽 전체 길이" value={input.total_wall_length_mm} onChange={(v) => onInputChange({ total_wall_length_mm: v })} />
-          <NumberInput label="수전 위치(좌측벽 기준)" value={input.water_position_x_mm} onChange={(v) => onInputChange({ water_position_x_mm: v })} />
-          {input.cooktop_option && input.cooktop_option !== "none" && (
-            <NumberInput label="가스/콘센트 위치" value={input.gas_position_x_mm} onChange={(v) => onInputChange({ gas_position_x_mm: v })} />
-          )}
         </div>
       )}
     </div>

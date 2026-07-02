@@ -57,35 +57,17 @@ export const PRODUCT_REQUIREMENTS: Record<ProductType, ProductRequirement> = {
     directOrderAllowed: false,
     requiresSitePhotos: false,
     requiredFields: [...COMMON_REQUIRED, "countertop_type"],
-    conditionalRequired: [
-      {
-        when: { field: "sink_option", not: "none" },
-        fields: ["sink_model_id", "drain_position_x_mm"],
-        reason: "싱크볼 선택 시 모델/배수 위치가 있어야 제작 가능합니다.",
-      },
-      {
-        when: { field: "cooktop_option", not: "none" },
-        fields: ["cooktop_model_id", "energy_type"],
-        reason: "쿡탑 선택 시 모델/연료 종류가 있어야 타공·설치가 가능합니다.",
-      },
-    ],
+    // 배수/가스/콘센트 위치·타공은 현장 시공(시공기사) 몫 — 공장은 빠르게 재단·제작만 한다.
+    // 싱크볼/쿡탑 모델은 옵션 선택(sink_option/cooktop_option)이 곧 모델이므로 별도 필수 없음.
+    conditionalRequired: [],
   },
   kitchen_full_set: {
     directOrderAllowed: false,
     requiresSitePhotos: true,
     requiredFields: [...COMMON_REQUIRED, "countertop_type"],
-    conditionalRequired: [
-      {
-        when: { field: "sink_option", not: "none" },
-        fields: ["sink_model_id", "drain_position_x_mm"],
-        reason: "싱크볼 선택 시 모델/배수 위치가 있어야 제작 가능합니다.",
-      },
-      {
-        when: { field: "cooktop_option", not: "none" },
-        fields: ["cooktop_model_id", "energy_type"],
-        reason: "쿡탑 선택 시 모델/연료 종류가 있어야 타공·설치가 가능합니다.",
-      },
-    ],
+    // 배수/가스/콘센트 위치·타공은 현장 시공(시공기사) 몫 — 공장은 빠르게 재단·제작만 한다.
+    // 싱크볼/쿡탑 모델은 옵션 선택(sink_option/cooktop_option)이 곧 모델이므로 별도 필수 없음.
+    conditionalRequired: [],
   },
   built_in_wardrobe: {
     directOrderAllowed: false,
