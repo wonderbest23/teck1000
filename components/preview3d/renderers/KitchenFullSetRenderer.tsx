@@ -1317,7 +1317,8 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
             depth={baseDepthM * 1.08}
             y={counterTopY}
             z={0.02}
-            color={countertop.id === "stainless" ? "#94a3b8" : "#e5e7eb"}
+            color="#e5e7eb"
+            stainless={countertop.id === "stainless"}
             cutout={sinkCut}
             gaps={gasGaps}
           />

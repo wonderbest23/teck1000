@@ -39,6 +39,7 @@ export function CountertopWithCutout({
   z = 0.02,
   color,
   cutout,
+  stainless = false,
   gaps = [],
 }: {
   width: number;
@@ -46,6 +47,8 @@ export function CountertopWithCutout({
   y: number;
   z?: number;
   color: string;
+  /** 스텐 상판 — 어둡고 반사 강한 스테인리스 + 뒷턱(백스플래시 립) + 전면 밝은 엣지 */
+  stainless?: boolean;
   /** 싱크 컷아웃(부분 구멍) */
   cutout?: { x: number; w: number; d: number; z: number } | null;
   /** 상판이 아예 끊기는 구간(가스대 등 — 전체 깊이) */
@@ -68,8 +71,30 @@ export function CountertopWithCutout({
   }
   if (right - cursor > 0.01) segments.push([cursor, right]);
   if (segments.length === 0) return null;
+  const Slab = ({ size, position }: { size: [number, number, number]; position: [number, number, number] }) =>
+    stainless ? (
+      <mesh position={position}>
+        <boxGeometry args={size} />
+        <meshStandardMaterial color="#4b535b" metalness={0.9} roughness={0.22} envMapIntensity={1.4} />
+      </mesh>
+    ) : (
+      <Trim size={size} position={position} color={color} />
+    );
   return (
     <group>
+      {/* 스텐 상판 디테일 — 뒷턱(백스플래시 립) + 전면 밝은 엣지 접힘 */}
+      {stainless && segments.map(([a, b], i) => (
+        <group key={`ss-${i}`}>
+          <mesh position={[(a + b) / 2, y + KITCHEN_COUNTERTOP_M + 0.03, back + 0.011]}>
+            <boxGeometry args={[b - a, 0.06, 0.022]} />
+            <meshStandardMaterial color="#565f67" metalness={0.9} roughness={0.2} envMapIntensity={1.4} />
+          </mesh>
+          <mesh position={[(a + b) / 2, yMid, front - 0.005]}>
+            <boxGeometry args={[b - a, KITCHEN_COUNTERTOP_M + 0.006, 0.01]} />
+            <meshStandardMaterial color="#8f99a1" metalness={0.92} roughness={0.15} envMapIntensity={1.6} />
+          </mesh>
+        </group>
+      ))}
       {segments.map(([a, b], index) => {
         const hasSink =
           cutout &&
@@ -78,7 +103,7 @@ export function CountertopWithCutout({
           cutout.z - cutout.d / 2 > back + 0.005 &&
           cutout.z + cutout.d / 2 < front - 0.005;
         if (!hasSink || !cutout) {
-          return <Trim key={`seg-${index}`} size={[b - a, KITCHEN_COUNTERTOP_M, depth]} position={[(a + b) / 2, yMid, z]} color={color} />;
+          return <Slab key={`seg-${index}`} size={[b - a, KITCHEN_COUNTERTOP_M, depth]} position={[(a + b) / 2, yMid, z]} />;
         }
         const cl = cutout.x - cutout.w / 2;
         const cr = cutout.x + cutout.w / 2;
@@ -86,10 +111,10 @@ export function CountertopWithCutout({
         const cf = cutout.z + cutout.d / 2;
         return (
           <group key={`seg-${index}`}>
-            <Trim size={[cl - a, KITCHEN_COUNTERTOP_M, depth]} position={[(a + cl) / 2, yMid, z]} color={color} />
-            <Trim size={[b - cr, KITCHEN_COUNTERTOP_M, depth]} position={[(cr + b) / 2, yMid, z]} color={color} />
-            <Trim size={[cutout.w, KITCHEN_COUNTERTOP_M, cb - back]} position={[cutout.x, yMid, (back + cb) / 2]} color={color} />
-            <Trim size={[cutout.w, KITCHEN_COUNTERTOP_M, front - cf]} position={[cutout.x, yMid, (cf + front) / 2]} color={color} />
+            <Slab size={[cl - a, KITCHEN_COUNTERTOP_M, depth]} position={[(a + cl) / 2, yMid, z]} />
+            <Slab size={[b - cr, KITCHEN_COUNTERTOP_M, depth]} position={[(cr + b) / 2, yMid, z]} />
+            <Slab size={[cutout.w, KITCHEN_COUNTERTOP_M, cb - back]} position={[cutout.x, yMid, (back + cb) / 2]} />
+            <Slab size={[cutout.w, KITCHEN_COUNTERTOP_M, front - cf]} position={[cutout.x, yMid, (cf + front) / 2]} />
           </group>
         );
       })}
@@ -122,7 +147,7 @@ function getHairlineTexture() {
 const SINK_RIM_POLISHED = { color: "#cdd5db", metalness: 0.92, roughness: 0.16 } as const;
 const SINK_STEEL_BRUSHED = { color: "#8d979f", metalness: 0.82, roughness: 0.34 } as const;
 // 스텐 상판 일체형: 상판과 같은 톤으로 프레스 성형된 느낌(림 거의 없음)
-const SINK_STEEL_TOP = { color: "#98a3ab", metalness: 0.85, roughness: 0.28 } as const;
+const SINK_STEEL_TOP = { color: "#5a636b", metalness: 0.88, roughness: 0.24 } as const;
 
 /** 싱크볼 — 상판 컷아웃 안에 실제 볼(4벽+바닥+배수구, 더블볼은 중간 분리대) */
 export function SinkFixture({
