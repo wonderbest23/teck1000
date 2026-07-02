@@ -76,7 +76,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const isFresh = searchParams.get("fresh") === "1";
   const [hydrated, setHydrated] = useState(false);
   // Phase 1: 주방 세트 신규 생성 시 "형태→길이" 프리셋 픽커를 먼저 보여준다(빈 캔버스 제거)
-  const [showKitchenPreset, setShowKitchenPreset] = useState(productType === "kitchen_full_set");
+  // /start에서 이미 프리셋(starter)을 골라 들어왔으면 픽커를 또 띄우지 않는다 — 단계 중복 제거
+  const [showKitchenPreset, setShowKitchenPreset] = useState(productType === "kitchen_full_set" && !searchParams.get("starter"));
   useEffect(() => {
     if (isFresh) {
       // 기존 작업본을 '최근 저장 내역'으로 보관 후 슬롯 비움 + 장바구니(방에 떠있던 가구)도 비움 → 완전히 깨끗한 새 시작
@@ -2274,12 +2275,13 @@ function getInitialInput(productType: ProductType): FurnitureInput {
       material: "UV 하이그로시 화이트",
       color: "무광 화이트",
       kitchen_template: "kitchen_2400_standard",
-      countertop_type: "none",
-      toe_kick_option: "none",
-      sink_option: "none",
-      faucet_option: "none",
-      hood_option: "none",
-      cooktop_option: "none",
+      // 시작부터 '바로 주문 가능한 완성품' — 사용자는 사이즈 조절·장 추가만 하면 된다
+      countertop_type: "pt_white",
+      toe_kick_option: "standard_100",
+      sink_option: "single_780",
+      faucet_option: "basic_cobra",
+      hood_option: "haatz_slide_600",
+      cooktop_option: "gas_3burner_560",
       microwave_option: "none",
       drawer_module_count: 1,
       pullout_module_count: 0,

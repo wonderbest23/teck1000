@@ -183,12 +183,16 @@ export function applyKitchenPreset<T extends Record<string, unknown>>(
   currentInput: T,
   preset: KitchenPreset,
 ): T {
+  const cur = currentInput as Record<string, unknown>;
   return {
     ...currentInput,
     ...preset.input,
     // 레이어 폭 동기화 — 렌더러/견적이 base/wall 레이어를 따로 읽으므로 함께 갱신
     kitchen_base_modules_mm: [...preset.input.kitchen_modules_mm],
     kitchen_wall_modules_mm: [...preset.input.kitchen_modules_mm],
+    // 프리셋 = 바로 주문 가능한 완성품: 상판·걸레받이가 비어 있으면 표준값으로 채운다
+    countertop_type: cur.countertop_type && cur.countertop_type !== "none" ? cur.countertop_type : "pt_white",
+    toe_kick_option: cur.toe_kick_option && cur.toe_kick_option !== "none" ? cur.toe_kick_option : "standard_100",
   } as T;
 }
 
