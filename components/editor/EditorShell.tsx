@@ -26,6 +26,8 @@ export function EditorShell({
   toolbar,
   footer,
   overlay = false,
+  fullScreen = false,
+  onFullScreenChange,
 }: {
   header?: ReactNode;
   categories: ShellCategory[];
@@ -42,12 +44,16 @@ export function EditorShell({
   footer?: ReactNode;
   /** 전체화면 미리보기 모드 — 미리보기가 화면을 채우고, 상단 한 줄 툴바 + 우측 옵션 드로어로 정리 */
   overlay?: boolean;
+  fullScreen?: boolean;
+  onFullScreenChange?: (fullScreen: boolean) => void;
 }) {
-  // (모바일 팝업) ESC로 닫기 + 열려 있는 동안 배경 스크롤 잠금. activeCat이 있을 때만 동작.
+  // (모바일 팝업/전체모드) ESC로 닫기 + 열려 있는 동안 배경 스크롤 잠금.
   useEffect(() => {
-    if (!activeCat) return;
+    if (!activeCat && !fullScreen) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onSelectCat(null);
+      if (event.key !== "Escape") return;
+      if (activeCat) onSelectCat(null);
+      else if (fullScreen) onFullScreenChange?.(false);
     };
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -56,44 +62,52 @@ export function EditorShell({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [activeCat, onSelectCat]);
+  }, [activeCat, fullScreen, onFullScreenChange, onSelectCat]);
 
   if (overlay) {
+    const hasTopBar = Boolean(toolbar) || categories.length > 0;
     return (
-      <div className="w-full pb-24">
-        {header}
+      <div className={fullScreen ? "fixed inset-0 z-40 w-full bg-[#fafbfc]" : "w-full pb-24"}>
+        {!fullScreen && header}
         {/* 전체화면 미리보기 — 최상단 한 줄 툴바(섹션) + 그 아래 캔버스 */}
-        <div className="flex h-[74dvh] min-h-[520px] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-card sm:h-[70dvh] sm:min-h-[560px] lg:h-[64dvh] lg:min-h-[520px]">
+        <div className={[
+          "flex w-full flex-col overflow-hidden border border-slate-200 bg-slate-100 shadow-card",
+          fullScreen
+            ? "h-[100dvh] min-h-0 rounded-none border-0"
+            : "h-[86dvh] min-h-[640px] rounded-2xl sm:h-[78dvh] sm:min-h-[640px] lg:h-[64dvh] lg:min-h-[520px]",
+        ].join(" ")}>
           {/* 상단 툴바 — 상품명·모드·토글 + 카테고리를 한 줄로 깔끔하게 (가로 스크롤) */}
-          <div className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
-            <div className="scrollbar-none flex items-center gap-1.5 overflow-x-auto px-2.5 py-2">
-              {toolbar}
-              {toolbar && categories.length > 0 && <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200" />}
-              {categories.map((cat) => {
-                const active = activeCat === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    title={cat.label}
-                    aria-label={cat.label}
-                    aria-pressed={active}
-                    onClick={() => onSelectCat(active ? null : cat.id)}
-                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border text-base transition ${active ? "border-brand bg-brand text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-                  >
-                    <span className="leading-none">{cat.icon}</span>
-                  </button>
-                );
-              })}
+          {hasTopBar && (
+            <div className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
+              <div className="scrollbar-none flex items-center gap-1.5 overflow-x-auto px-2.5 py-2">
+                {toolbar}
+                {toolbar && categories.length > 0 && <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200" />}
+                {categories.map((cat) => {
+                  const active = activeCat === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      title={cat.label}
+                      aria-label={cat.label}
+                      aria-pressed={active}
+                      onClick={() => onSelectCat(active ? null : cat.id)}
+                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border text-base transition ${active ? "border-brand bg-brand text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                    >
+                      <span className="leading-none">{cat.icon}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 캔버스 */}
           <div className="relative flex-1">{canvas}</div>
         </div>
 
-        {belowCanvas}
-        {footer}
+        {!fullScreen && belowCanvas}
+        {!fullScreen && footer}
 
         {/* 옵션 미니 팝업(하단 바텀시트) — 미리보기는 그대로 보이고 아래에서 작은 창만 뜬다 */}
         {activeCat && (

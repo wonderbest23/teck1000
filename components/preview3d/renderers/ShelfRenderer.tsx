@@ -34,6 +34,9 @@ function StorageDrawers({
   const gap = 0.01;
   const frontZ = depth / 2 + 0.012;
   const faceHeight = Math.max((zoneHeight - gap * (count + 1)) / count, 0.06);
+  const boxDepth = Math.max(depth * 0.5, 0.16);
+  const boxWidth = Math.max(width * 0.82, 0.12);
+  const sideH = Math.max(faceHeight * 0.55, 0.045);
 
   useFrame((_, delta) => {
     refs.current.forEach((group, index) => {
@@ -49,6 +52,21 @@ function StorageDrawers({
       {Array.from({ length: count }).map((_, index) => {
         const y = zoneHeight - gap - faceHeight / 2 - index * (faceHeight + gap);
         return (
+          <group key={`storage-rail-${index}`} position={[0, y - faceHeight * 0.08, 0]}>
+            {[-1, 1].map((side) => (
+              <Trim
+                key={`storage-rail-${index}-${side}`}
+                size={[0.018, 0.018, depth * 0.62]}
+                position={[side * width * 0.47, 0, -depth * 0.04]}
+                color="#94a3b8"
+              />
+            ))}
+          </group>
+        );
+      })}
+      {Array.from({ length: count }).map((_, index) => {
+        const y = zoneHeight - gap - faceHeight / 2 - index * (faceHeight + gap);
+        return (
           <group
             key={`storage-drawer-${index}`}
             ref={(node) => {
@@ -57,6 +75,18 @@ function StorageDrawers({
             position={[0, y, frontZ]}
           >
             <Panel size={[width * 0.96, faceHeight, 0.018]} position={[0, 0, 0]} color={material.color} edge={material.edge} />
+            <Panel size={[boxWidth, 0.012, boxDepth]} position={[0, -faceHeight * 0.2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
+            <Panel size={[0.014, sideH, boxDepth]} position={[-boxWidth / 2, -faceHeight * 0.2 + sideH / 2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
+            <Panel size={[0.014, sideH, boxDepth]} position={[boxWidth / 2, -faceHeight * 0.2 + sideH / 2, -boxDepth / 2]} color={lighten(material.color)} edge={material.edge} />
+            <Panel size={[boxWidth, sideH, 0.014]} position={[0, -faceHeight * 0.2 + sideH / 2, -boxDepth]} color={lighten(material.color)} edge={material.edge} />
+            {[-1, 1].map((side) => (
+              <Trim
+                key={`moving-rail-${index}-${side}`}
+                size={[0.012, 0.014, boxDepth * 0.9]}
+                position={[side * (boxWidth / 2 + 0.012), -faceHeight * 0.05, -boxDepth / 2]}
+                color="#64748b"
+              />
+            ))}
             {showHandles && (
               <Trim size={[width * 0.4, 0.016, 0.024]} position={[0, -faceHeight * 0.22, 0.022]} color={material.edge} />
             )}

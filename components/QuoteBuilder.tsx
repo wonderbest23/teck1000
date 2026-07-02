@@ -11,7 +11,7 @@ import type { RoomAction, RoomStateSummary } from "@/lib/roomCommands";
 import { archiveDraft, readDraft, writeDraft } from "@/lib/quoteHistory";
 import { defaultInput, getProduct, materials } from "@/lib/data";
 import { formatMoney } from "@/lib/format";
-import { clampModuleIndex, cooktopOptions, countertopOptions, deriveModuleTypeCounts, faucetOptions, getHoodSpec, getKitchenSetDimensions, getKitchenTemplate, getSinkMinCabinetWidthMm, hoodOptions, KITCHEN_DIMENSION_LIMITS, kitchenTemplates, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, snapKitchenDimensionMm, toeKickOptions } from "@/lib/kitchen";
+import { clampModuleIndex, cooktopOptions, countertopOptions, DEFAULT_KITCHEN_MODULE_WIDTH_MM, deriveModuleTypeCounts, faucetOptions, getHoodSpec, getKitchenSetDimensions, getKitchenTemplate, getSinkMinCabinetWidthMm, hoodOptions, KITCHEN_DIMENSION_LIMITS, kitchenTemplates, MAX_KITCHEN_MODULE_COUNT, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, snapKitchenDimensionMm, toeKickOptions, type KitchenModuleType } from "@/lib/kitchen";
 import { MAX_WARDROBE_MODULE_COUNT, MAX_WARDROBE_MODULE_WIDTH_MM, MIN_WARDROBE_MODULE_COUNT, MIN_WARDROBE_MODULE_WIDTH_MM, alignWardrobeCounts, getDefaultWardrobeModules, normalizeWardrobeModules, wardrobeModuleTypeLabels, type WardrobeModuleType } from "@/lib/wardrobe";
 import { calculateQuote } from "@/lib/quote";
 import { countOptionCases, getDoorCountOptions, getSafeDoorCount, productRules } from "@/lib/rules";
@@ -128,6 +128,9 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const [showDimensions, setShowDimensions] = useState(false);
   const [doorsOpen, setDoorsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"2d" | "room">("room");
+  const [previewFullScreen, setPreviewFullScreen] = useState(false);
+  const [showStartChoice, setShowStartChoice] = useState(true);
+  const [startStep, setStartStep] = useState<"intro" | "category">("intro");
   const [selModule, setSelModule] = useState<number | null>(null);
   // 내 공간(멀티 가구 씬) 배치/선택
   const [roomPlacements, setRoomPlacements] = useState<Record<string, { x: number; z: number; rotY: number }>>({});
@@ -140,6 +143,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   // 모바일: 사이즈 패널을 미리보기 위가 아니라 섹션 아래(belowCanvas)에 포털로 렌더 — 화면을 가리지 않게
   const [mobilePanelHost, setMobilePanelHost] = useState<HTMLDivElement | null>(null);
   const [pickerSlug, setPickerSlug] = useState<ProductType | null>(null); // 규격 선택 단계(제품 누르면 사이즈 칩 표시)
+  const [needCategory, setNeedCategory] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false); // AI 명령 채팅 패널
   // 상품추가 패널 — 같은 주문(장바구니)에 담긴 항목 목록
   const [cartItems, setCartItems] = useState<ReturnType<typeof getCart>>([]);
@@ -165,7 +169,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const product = getProduct(productType)!;
   const roomItems: RoomItem[] = useMemo(
     () => [
-      { id: "current", name: isManual && manualTitle ? manualTitle : product.name, input },
+      { id: "current", name: isManual && manualTitle ? manualTitle : productLabels[input.productType] ?? product.name, input },
       ...cartItems.map((it) => ({ id: it.id, name: it.name, input: it.input })),
     ],
     [input, cartItems, product.name, isManual, manualTitle],
@@ -836,6 +840,69 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     window.setTimeout(() => setJustAddedId((cur) => (cur === item.id ? null : cur)), 3500);
   }
 
+  type QuickProductId = ProductType | "drawer_cabinet";
+  const quickProductSlug = (id: QuickProductId): ProductType => (id === "drawer_cabinet" ? "custom_shelf" : id);
+  const quickProductLabel = (id: QuickProductId) => (id === "drawer_cabinet" ? "서랍장" : productLabels[id] ?? id);
+
+  function makeQuickProductInput(id: QuickProductId, source?: FurnitureInput) {
+    const slug = quickProductSlug(id);
+    const draft: FurnitureInput = {
+      ...getInitialInput(slug),
+      material: source?.material ?? getInitialInput(slug).material,
+      color: source?.color ?? getInitialInput(slug).color,
+      door_style: source?.door_style ?? getInitialInput(slug).door_style,
+      handle_type: source?.handle_type ?? getInitialInput(slug).handle_type,
+    };
+    if (id === "drawer_cabinet") {
+      draft.width_mm = Math.max(600, Math.min(1000, source?.width_mm ?? 800));
+      draft.height_mm = Math.max(700, Math.min(1200, source?.height_mm ?? 850));
+      draft.depth_mm = Math.max(400, Math.min(600, source?.depth_mm ?? 500));
+      draft.has_door = false;
+      draft.door_count = 0;
+      draft.shelf_count = 0;
+      draft.storage_drawer_count = 3;
+      draft.open_type = "여닫이";
+    }
+    return normalizeInput(draft);
+  }
+
+  function replaceActiveProduct(id: QuickProductId) {
+    const label = quickProductLabel(id);
+    const nextInput = makeQuickProductInput(id, activeInput);
+    if (activeRoomId === "current") {
+      setInput(nextInput);
+    } else {
+      setCart(getCart().map((item) => (item.id === activeRoomId ? { ...item, name: label, input: nextInput } : item)));
+    }
+    setRoomSelected(activeRoomId);
+    setJustAddedId(activeRoomId);
+    setAddOpen(false);
+    setCanvasMode("edit");
+    window.setTimeout(() => setJustAddedId((cur) => (cur === activeRoomId ? null : cur)), 2500);
+  }
+
+  function addQuickProduct(id: QuickProductId) {
+    const slug = quickProductSlug(id);
+    const label = quickProductLabel(id);
+    const item = addConfiguredItem(slug, label, makeQuickProductInput(id, activeInput), 1);
+    setViewMode("room");
+    setRoomSelected(item.id);
+    setJustAddedId(item.id);
+    setAddOpen(false);
+    setCanvasMode("edit");
+    window.setTimeout(() => setJustAddedId((cur) => (cur === item.id ? null : cur)), 3500);
+  }
+
+  function beginWithProduct(id: QuickProductId) {
+    const nextInput = makeQuickProductInput(id, activeInput);
+    setInput(nextInput);
+    setRoomSelected("current");
+    setNeedCategory(quickProducts.find((item) => item.id === id)?.category ?? null);
+    setShowKitchenPreset(id === "kitchen_full_set");
+    setShowStartChoice(false);
+    setCanvasMode("edit");
+  }
+
   // 상하부장 세트를 표준 프리셋(일자 2400/2700/3000·ㄱ자)으로 방에 추가 — 규격별 상품처럼 고른다
   function addKitchenSetToRoom(preset: KitchenPreset) {
     const base = getInitialInput("kitchen_full_set");
@@ -1028,6 +1095,185 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   });
   const currentGuideIndex = Math.max(0, beginnerSteps.findIndex((step) => step.id === effectiveCat));
   const currentGuide = beginnerSteps[currentGuideIndex] ?? beginnerSteps[0];
+  const needCategories = [
+    { id: "kitchen", label: "주방", hint: "싱크대·상부장·아일랜드" },
+    { id: "storage", label: "수납", hint: "서랍장·선반장·틈새장" },
+    { id: "entrance", label: "현관", hint: "신발장" },
+    { id: "wardrobe", label: "붙박이", hint: "옷장·드레스룸" },
+  ];
+  const quickProducts: Array<{ id: QuickProductId; label: string; slug: ProductType; category: string; hint: string }> = [
+    { id: "kitchen_full_set", label: "싱크대 세트", slug: "kitchen_full_set", category: "kitchen", hint: "하부장+상부장" },
+    { id: "kitchen_base_cabinet", label: "하부장", slug: "kitchen_base_cabinet", category: "kitchen", hint: "싱크볼·서랍 가능" },
+    { id: "kitchen_wall_cabinet", label: "상부장", slug: "kitchen_wall_cabinet", category: "kitchen", hint: "후드장·수납" },
+    { id: "kitchen_island", label: "아일랜드", slug: "kitchen_island", category: "kitchen", hint: "독립 조리대" },
+    { id: "drawer_cabinet", label: "서랍장", slug: "custom_shelf", category: "storage", hint: "레일 서랍형" },
+    { id: "custom_shelf", label: "선반장", slug: "custom_shelf", category: "storage", hint: "오픈/도어 수납" },
+    { id: "gap_cabinet", label: "틈새장", slug: "gap_cabinet", category: "storage", hint: "좁은 공간" },
+    { id: "shoe_cabinet", label: "신발장", slug: "shoe_cabinet", category: "entrance", hint: "현관 수납" },
+    { id: "built_in_wardrobe", label: "붙박이장", slug: "built_in_wardrobe", category: "wardrobe", hint: "행거·선반·서랍" },
+  ];
+  const startProductByCategory: Record<string, QuickProductId> = {
+    kitchen: "kitchen_full_set",
+    storage: "drawer_cabinet",
+    entrance: "shoe_cabinet",
+    wardrobe: "built_in_wardrobe",
+  };
+  const visibleQuickProducts = needCategory ? quickProducts.filter((item) => item.category === needCategory) : [];
+  const activeProductKey: QuickProductId = activeInput.productType === "custom_shelf" && (activeInput.storage_drawer_count ?? 0) > 0 ? "drawer_cabinet" : activeInput.productType;
+
+  const renderStartChoice = () => {
+    return (
+      <div className="h-full w-full overflow-y-auto bg-slate-50 px-4 py-6">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col items-center justify-center text-center">
+          {startStep === "intro" ? (
+            <div className="flex w-full max-w-lg flex-col items-center">
+              <div className="mb-4 inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-black text-brand ring-1 ring-brand/15">
+                수동 커스텀 제작
+              </div>
+              <div className="relative">
+                <h2 className="animate-pulse text-3xl font-black leading-tight text-ink sm:text-5xl">무엇이 필요하세요?</h2>
+                <div className="mt-3 flex justify-center gap-1.5">
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-brand [animation-delay:-0.2s]" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-brand [animation-delay:-0.1s]" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-brand" />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStartStep("category")}
+                className="mt-8 rounded-full bg-slate-950 px-7 py-3 text-sm font-black text-white shadow-lg shadow-slate-900/20 transition hover:bg-brand active:scale-95"
+              >
+                시작하기
+              </button>
+            </div>
+          ) : (
+            <div className="w-full">
+              <div className="mb-5">
+                <div className="text-[12px] font-black text-brand">필요한 카테고리를 선택하세요</div>
+                <h2 className="mt-1 text-2xl font-black text-ink sm:text-3xl">어떤 가구를 만들까요?</h2>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-4">
+                {needCategories.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => {
+                      setNeedCategory(category.id);
+                      beginWithProduct(startProductByCategory[category.id] ?? "custom_shelf");
+                    }}
+                    className="min-h-[104px] rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-brand hover:shadow-md active:scale-[0.99]"
+                  >
+                    <span className="block text-lg font-black text-ink">{category.label}</span>
+                    <span className="mt-1 block text-[12px] font-bold leading-5 text-slate-500">{category.hint}</span>
+                    <span className="mt-3 block text-[11px] font-black text-brand">바로 시작</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  function appendKitchenModule(kind: KitchenModuleType) {
+    if (activeInput.productType !== "kitchen_full_set") return;
+    const baseModules = activeInput.kitchen_base_modules_mm ?? activeInput.kitchen_modules_mm ?? getKitchenTemplate(activeInput.kitchen_template).modules;
+    if (baseModules.length >= MAX_KITCHEN_MODULE_COUNT) return;
+    const wallModules = activeInput.kitchen_wall_modules_mm ?? baseModules;
+    const nextBase = [...baseModules, DEFAULT_KITCHEN_MODULE_WIDTH_MM];
+    const nextWall = [...wallModules, DEFAULT_KITCHEN_MODULE_WIDTH_MM];
+    const nextTypes = [...(activeInput.kitchen_module_types ?? baseModules.map(() => "door" as KitchenModuleType)), kind];
+    const nextDrawers = [...(activeInput.kitchen_drawer_counts ?? baseModules.map(() => 3)), kind === "drawer" ? 3 : 3];
+    const nextBaseShelves = [...(activeInput.kitchen_base_shelf_counts ?? baseModules.map(() => 1)), kind === "open" ? 2 : 1];
+    const nextWallShelves = [...(activeInput.kitchen_wall_shelf_counts ?? baseModules.map(() => 1)), 1];
+    commitRoomItemById(activeRoomId, {
+      ...activeInput,
+      kitchen_modules_mm: nextBase,
+      kitchen_base_modules_mm: nextBase,
+      kitchen_wall_modules_mm: nextWall,
+      kitchen_module_types: nextTypes,
+      kitchen_drawer_counts: nextDrawers,
+      kitchen_base_shelf_counts: nextBaseShelves,
+      kitchen_wall_shelf_counts: nextWallShelves,
+      kitchen_door_swings: [...(activeInput.kitchen_door_swings ?? baseModules.map(() => "pair" as const)), "pair"],
+      door_count: nextBase.length,
+    });
+  }
+
+  function appendWardrobeModule(kind: WardrobeModuleType) {
+    if (activeInput.productType !== "built_in_wardrobe") return;
+    const layout = normalizeWardrobeModules(activeInput.wardrobe_modules_mm, activeInput.wardrobe_module_types, activeInput.width_mm);
+    if (layout.modules.length >= MAX_WARDROBE_MODULE_COUNT) return;
+    const modules = [...layout.modules, 600];
+    const moduleTypes = [...layout.moduleTypes, kind];
+    commitRoomItemById(activeRoomId, {
+      ...activeInput,
+      width_mm: modules.reduce((sum, width) => sum + width, 0),
+      wardrobe_modules_mm: modules,
+      wardrobe_module_types: moduleTypes,
+      wardrobe_drawer_counts: [...(activeInput.wardrobe_drawer_counts ?? layout.modules.map(() => 4)), kind === "drawer" ? 4 : 4],
+      wardrobe_shelf_counts: [...(activeInput.wardrobe_shelf_counts ?? layout.modules.map(() => 4)), kind === "shelf" ? 4 : 2],
+      wardrobe_door_swings: [...(activeInput.wardrobe_door_swings ?? layout.modules.map(() => "pair" as const)), "pair"],
+    });
+  }
+
+  function quickAppendModule(kind: "door" | "drawer" | "open") {
+    if (activeInput.productType === "kitchen_full_set") {
+      appendKitchenModule(kind === "open" ? "open" : kind);
+      return;
+    }
+    if (activeInput.productType === "built_in_wardrobe") {
+      appendWardrobeModule(kind === "drawer" ? "drawer" : kind === "open" ? "shelf" : "shelf");
+      return;
+    }
+    if (["custom_shelf", "gap_cabinet", "shoe_cabinet"].includes(activeInput.productType)) {
+      const nextDrawerCount = kind === "drawer" ? Math.min(4, Math.max(1, (activeInput.storage_drawer_count ?? 0) + 1)) : activeInput.storage_drawer_count ?? 0;
+      commitRoomItemById(activeRoomId, {
+        ...activeInput,
+        shelf_count: kind === "door" ? Math.min(12, Math.max(1, activeInput.shelf_count + 1)) : activeInput.shelf_count,
+        storage_drawer_count: nextDrawerCount,
+        has_door: activeInput.has_door,
+        door_count: activeInput.door_count,
+      });
+    }
+  }
+
+  const renderProductFlowPanel = () => (
+    <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex flex-col gap-1.5">
+      {addOpen && (
+        <div className="pointer-events-auto max-h-[42dvh] overflow-y-auto rounded-2xl border border-white/65 bg-white/92 p-3 shadow-xl shadow-slate-900/10 backdrop-blur-md">
+          {addSheetBody}
+        </div>
+      )}
+
+      {canvasMode === "edit" && (
+        <div className="pointer-events-auto flex gap-1.5 overflow-x-auto rounded-2xl border border-white/65 bg-slate-950/78 p-1.5 shadow-lg shadow-slate-900/10 backdrop-blur-md">
+          <button type="button" onClick={() => quickAppendModule("door")} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
+            칸+
+          </button>
+          <button type="button" onClick={() => quickAppendModule("drawer")} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
+            서랍칸+
+          </button>
+          <button type="button" onClick={() => setActiveCat("spec")} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
+            치수
+          </button>
+          <button type="button" onClick={() => setActiveCat("doors")} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
+            문/서랍
+          </button>
+          <button type="button" onClick={() => duplicateRoomItem(activeRoomId)} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
+            복제
+          </button>
+          <button type="button" onClick={() => removeRoomItem(activeRoomId)} className="shrink-0 rounded-xl bg-rose-500/90 px-3 py-2 text-[11px] font-black text-white hover:bg-rose-400">
+            삭제
+          </button>
+          <button type="button" onClick={() => setAddOpen((value) => !value)} className={`shrink-0 rounded-xl px-3 py-2 text-[11px] font-black ${addOpen ? "bg-white text-slate-950" : "bg-white/12 text-white hover:bg-white/22"}`}>
+            더보기
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   // '＋ 가구 추가' 시트 내용 — 데스크톱(캔버스 위 반투명 플로팅)과 모바일(섹션 아래)이 공유
   const addSheetBody = (
@@ -1097,15 +1343,17 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   );
 
   return (
-    <EditorShell
+      <EditorShell
       overlay
-      categories={categories}
+      categories={showStartChoice ? [] : categories}
       activeCat={activeCat}
       effectiveCat={effectiveCat}
       onSelectCat={setActiveCat}
       panelTitle={activeLabel}
       panelHeading={effectiveLabel}
-      toolbar={
+      fullScreen={previewFullScreen}
+      onFullScreenChange={setPreviewFullScreen}
+      toolbar={showStartChoice ? null : (
         <>
           <span className="shrink-0 px-1 text-[12px] font-black text-ink">{isManual && manualTitle ? manualTitle : product.name}</span>
           <div className="inline-flex shrink-0 rounded-full border border-slate-200 bg-white p-0.5 text-[10px] font-black">
@@ -1114,15 +1362,34 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
             ))}
           </div>
           <button type="button" title="AI로 만들기" aria-label="AI로 만들기" onClick={() => setChatOpen((v) => !v)} className={`grid h-9 shrink-0 place-items-center rounded-full border px-3 text-[12px] font-black transition ${chatOpen ? "border-brand bg-brand text-white" : "border-brand/40 bg-white text-brand"}`}>AI</button>
+          {!previewFullScreen && (
+            <div className="hidden shrink-0 items-center sm:flex">
+              <div className="rounded-l-full bg-amber-100 px-3 py-1.5 text-[11px] font-black text-amber-900 ring-1 ring-amber-200">
+                이걸 누르면 전체모드로 볼 수 있어요
+              </div>
+              <div className="h-0 w-0 border-y-[8px] border-l-[10px] border-y-transparent border-l-amber-100" />
+            </div>
+          )}
+          <button type="button" title={previewFullScreen ? "전체모드 종료" : "전체모드"} aria-label={previewFullScreen ? "전체모드 종료" : "전체모드"} aria-pressed={previewFullScreen} onClick={() => setPreviewFullScreen((value) => !value)} className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border transition ${previewFullScreen ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-600"}`}>
+            {previewFullScreen ? (
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v5H3" /><path d="M16 3v5h5" /><path d="M8 21v-5H3" /><path d="M16 21v-5h5" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3H3v6" /><path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M15 21h6v-6" /></svg>
+            )}
+          </button>
           {isModularProduct && isPro && (
             <button type="button" title="도면 편집" aria-label="도면 편집" onClick={() => setViewMode(viewMode === "2d" ? "room" : "2d")} className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border transition ${viewMode === "2d" ? "border-brand bg-brand text-white" : "border-slate-200 bg-white text-slate-600"}`}>
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 9v11" strokeLinecap="round" /></svg>
             </button>
           )}
         </>
-      }
+      )}
       canvas={
         <div className="relative h-full w-full">
+          {showStartChoice ? (
+            renderStartChoice()
+          ) : (
+          <>
           {/* Phase 1: 주방 세트 신규 생성 시 프리셋 픽커를 먼저 (빈 캔버스 대신 완성 구성에서 시작) */}
           {showKitchenPreset && input.productType === "kitchen_full_set" && (
             <div className="absolute inset-0 z-40 flex items-start justify-center overflow-auto bg-slate-50/95 p-4 backdrop-blur-sm sm:items-center">
@@ -1141,6 +1408,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
           {!(isModularProduct && isPro && viewMode === "2d") ? (
             <>
               <RoomScene items={roomItems} placements={roomPlacements} selectedId={roomSelected} highlightId={justAddedId} expert={isPro} editable={canvasMode === "edit"} onSelect={setRoomSelected} onMove={moveRoomItem} onMoveEnd={endRoomMove} onResize={resizeRoomItem} onCommitItem={commitRoomItemById} onRotateItem={rotateRoomItem} onDuplicateItem={duplicateRoomItem} onRemoveItem={removeRoomItem} selectedNotice={selectedNotice} mobilePanelHost={mobilePanelHost} showDimensions={showDimensions} doorsOpen={doorsOpen} guides={roomGuides} floor={roomFloor} />
+              {renderProductFlowPanel()}
 
               {/* 통합 툴바 — 보기/수정 모드 · 치수 · 문열림 · 자동정렬 · 실행취소를 한 곳에(글래스 바) */}
               <div className="pointer-events-auto absolute left-3 top-3 z-20 flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-white/85 p-1 shadow-lg shadow-slate-900/5 backdrop-blur-md">
@@ -1193,23 +1461,6 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                 </div>
               )}
 
-              {/* ＋ 가구 추가 — 버튼은 캔버스 하단 플로팅. 시트는 데스크톱=캔버스 위 반투명, 모바일=섹션 아래(belowCanvas) */}
-              {canvasMode === "edit" && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex flex-col items-center gap-2 px-3">
-                  {addOpen && (
-                    <div className="pointer-events-auto w-[min(100%,560px)] rounded-2xl border border-white/60 bg-white/70 p-3 shadow-xl shadow-slate-900/10 backdrop-blur-[3px] max-sm:hidden">
-                      {addSheetBody}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setAddOpen((v) => !v)}
-                    className={`pointer-events-auto flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[12px] font-black shadow-lg backdrop-blur-md transition active:scale-95 ${addOpen ? "bg-slate-900 text-white" : "border border-slate-200/70 bg-white/90 text-slate-700 hover:border-brand hover:text-brand"}`}
-                  >
-                    <span className="text-base leading-none">＋</span> 가구 추가
-                  </button>
-                </div>
-              )}
             </>
           ) : (
             <section className="h-full w-full overflow-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
@@ -1252,6 +1503,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
               )}
             </section>
           )}
+          </>
+          )}
         </div>
       }
       belowCanvas={
@@ -1259,9 +1512,6 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
           <div className="mt-2 space-y-2 sm:hidden">
             {/* 모바일: 사이즈 패널(RoomScene이 포털로 채움)과 가구추가 시트를 미리보기 아래에 — 화면을 가리지 않게 */}
             <div ref={setMobilePanelHost} />
-            {canvasMode === "edit" && addOpen && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-card">{addSheetBody}</div>
-            )}
           </div>
         ) : null
       }
@@ -1606,7 +1856,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                 )}
         </>
       }
-      footer={
+      footer={showStartChoice ? null : (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 sm:gap-3 lg:max-w-6xl">
             <div className="min-w-0">
@@ -1662,7 +1912,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
             </div>
           </div>
         </div>
-      }
+      )}
     />
   );
 }
