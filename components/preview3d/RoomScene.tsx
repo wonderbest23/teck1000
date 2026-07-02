@@ -129,7 +129,7 @@ function DraggableItem({
   showName?: boolean;
   showDimensions?: boolean;
   doorsOpen?: boolean;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null) => void;
   onMove: (id: string, x: number, z: number) => void;
   onMoveEnd: () => void;
   onResize: (id: string, patch: Partial<FurnitureInput>, center?: { x: number; z: number }, dir?: { x: number; z: number }) => void;
@@ -153,10 +153,14 @@ function DraggableItem({
     return helpers.ray.ray.intersectPlane(helpers.plane, helpers.hit);
   }
 
-  // 몸체 클릭 = 선택만 (이동 아님)
+  // 몸체 클릭 = 선택 토글 (다시 클릭하면 해제 → 문 닫힘)
   function selectOnly(event: { stopPropagation: () => void }) {
     event.stopPropagation();
-    onSelect(item.id);
+    onSelect(selected ? null : item.id);
+  }
+
+  function toggleStorageModuleSelect() {
+    onSelect(selected ? null : item.id);
   }
 
   // 동그라미 핸들 드래그 = 이동 (잡은 지점 기준 오프셋 유지)
@@ -260,7 +264,7 @@ function DraggableItem({
           kitchen
             ? kitchen.onSelectModule
             : () => {
-                onSelect(item.id);
+                toggleStorageModuleSelect();
               }
         }
         onAddModule={kitchen?.onAddModule}

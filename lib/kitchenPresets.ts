@@ -12,6 +12,7 @@
 import type { KitchenModuleType } from "@/lib/kitchen";
 
 export type KitchenPresetId =
+  | "straight_1800"
   | "straight_2400"
   | "straight_2700"
   | "straight_3000"
@@ -48,6 +49,21 @@ export interface KitchenPreset {
 // -------------------------------------------------------------
 
 export const KITCHEN_PRESETS: KitchenPreset[] = [
+  {
+    id: "straight_1800",
+    label: "일자 1800",
+    description: "원룸·소형 아파트 · 싱크+서랍+쿡탑",
+    totalWidthMm: 1800,
+    shape: "straight",
+    input: {
+      kitchen_layout_shape: "straight",
+      kitchen_modules_mm: [800, 600, 400],
+      kitchen_module_types: ["sink_base", "drawer", "cooktop"],
+      sink_module_index: 0,
+      cooktop_module_index: 2,
+      hood_module_index: 2,
+    },
+  },
   {
     id: "straight_2400",
     label: "일자 2400",
@@ -148,6 +164,13 @@ export function applyKitchenPreset<T extends Record<string, unknown>>(
     kitchen_base_modules_mm: [...preset.input.kitchen_modules_mm],
     kitchen_wall_modules_mm: [...preset.input.kitchen_modules_mm],
   } as T;
+}
+
+/** 총 폭 → kitchen.ts 템플릿 id (견적·스펙 탭 연동) */
+export function kitchenTemplateIdForWidth(widthMm: number): string {
+  if (widthMm <= 1800) return "kitchen_1800_basic";
+  if (widthMm <= 2400) return "kitchen_2400_standard";
+  return "kitchen_3000_family";
 }
 
 /** 총 폭이 사용자 입력값과 다를 때 마지막 조정 칸(door/pullout/open/drawer)에서 차이를 흡수 */

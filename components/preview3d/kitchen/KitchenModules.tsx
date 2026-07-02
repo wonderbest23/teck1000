@@ -6,7 +6,7 @@ import { useRef } from "react";
 import type { Group } from "three";
 import { KITCHEN_TOE_KICK_M } from "@/components/preview3d/constants";
 import { lighten } from "@/components/preview3d/materials";
-import { shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
+import { carcassShellProps, frontPanelProps, resolveModuleViewMode, shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
 import type { SinkFixtureSpec } from "@/components/preview3d/kitchen/sinkFixtureSpec";
 import { CARCASS_FINISH, Doors, DrainPlaceholder, Panel, SimpleCabinet, Trim } from "@/components/preview3d/primitives";
 import type { DoorStyle, DoorSwing, MaterialColors, PreviewEditTarget, PreviewViewMode } from "@/components/preview3d/types";
@@ -77,6 +77,38 @@ export function LegsAndToeKick({
   );
 }
 
+/** 아일랜드 EP(엔드패널) — 좌·우·후면을 문짝 재질로 가려 carcass·조절발 노출 없음 */
+export function IslandEndPanels({
+  width,
+  height,
+  depth,
+  material,
+  bodyOffsetY = KITCHEN_TOE_KICK_M,
+}: {
+  width: number;
+  height: number;
+  depth: number;
+  material: MaterialColors;
+  bodyOffsetY?: number;
+}) {
+  const t = 0.018;
+  const fullH = bodyOffsetY + height;
+  const y = fullH / 2;
+  return (
+    <group>
+      <Panel size={[t, fullH, depth]} position={[-width / 2 - t / 2, y, 0]} color={material.color} edge={material.edge} />
+      <Panel size={[t, fullH, depth]} position={[width / 2 + t / 2, y, 0]} color={material.color} edge={material.edge} />
+      <Panel size={[width + t * 2, fullH, t]} position={[0, y, -depth / 2 - t / 2]} color={material.color} edge={material.edge} />
+    </group>
+  );
+}
+
+const FRONT_PANEL_T = 0.018;
+/** 문짝·서랍 전면판 Z — Doors 컴포넌트와 동일 (앞으로 튀어나와 ‘살짝 열림’처럼 보이지 않게) */
+const frontPanelZ = (depth: number) => depth / 2 + FRONT_PANEL_T * 0.52;
+/** 서랍·도어 전면 폭 — carcass 측판 안쪽에 맞춤 */
+const frontFaceWidth = (width: number) => Math.max(width - FRONT_PANEL_T * 4, width * 0.96, 0.04);
+
 function resolveDoorCount(moduleType: KitchenModuleType, doorCount: number) {
   if (moduleType === "open" || moduleType === "cooktop" || moduleType === "gas" || moduleType === "microwave" || moduleType === "oven" || moduleType === "dishwasher") {
     return 0;
@@ -98,6 +130,7 @@ function AnimatedDrawerStack({
   active,
   mode,
   showHandles = true,
+  revealInterior = false,
 }: {
   width: number;
   height: number;
@@ -107,12 +140,16 @@ function AnimatedDrawerStack({
   active: boolean;
   mode: "drawer" | "pullout";
   showHandles?: boolean;
+  revealInterior?: boolean;
 }) {
   const refs = useRef<Array<Group | null>>([]);
   const safeCount = mode === "pullout" ? 2 : clampDrawerCount(count);
-  const gap = 0.01;
-  const frontZ = depth / 2 + 0.034;
+  const gap = 0.006;
+  const frontZ = frontPanelZ(depth);
+  const faceWidth = frontFaceWidth(width);
   const faceHeight = Math.max((height - gap * (safeCount + 1)) / safeCount, 0.08);
+  const faceGhost = frontPanelProps(revealInterior, active);
+  const showDrawerInterior = active || revealInterior;
 
   useFrame((_, delta) => {
     refs.current.forEach((group, index) => {
@@ -136,19 +173,13 @@ function AnimatedDrawerStack({
             position={[0, y, frontZ]}
           >
             <Panel
-              size={[width * 0.9, faceHeight, 0.018]}
+              size={[faceWidth, faceHeight, FRONT_PANEL_T]}
               position={[0, 0, 0]}
               color={material.color}
               edge={material.edge}
+              {...faceGhost}
             />
-            {showHandles && (
-              <Trim
-                size={[width * 0.42, 0.018, 0.026]}
-                position={[0, -faceHeight * 0.24, 0.024]}
-                color={material.edge}
-              />
-            )}
-            {active && (
+            {showDrawerInterior && (
               <>
                 <Trim
                   size={[width * 0.82, 0.012, depth * 0.42]}
@@ -163,12 +194,21 @@ function AnimatedDrawerStack({
                     color="#94a3b8"
                   />
                 ))}
-                <Trim
-                  size={[width * 0.82, 0.012, depth * 0.32]}
-                  position={[0, -faceHeight * 0.02, -depth * 0.16]}
-                  color={lighten(material.color)}
-                />
+                {active && (
+                  <Trim
+                    size={[width * 0.82, 0.012, depth * 0.32]}
+                    position={[0, -faceHeight * 0.02, -depth * 0.16]}
+                    color={lighten(material.color)}
+                  />
+                )}
               </>
+            )}
+            {showHandles && (
+              <Trim
+                size={[width * 0.42, 0.018, 0.026]}
+                position={[0, -faceHeight * 0.24, 0.024]}
+                color={material.edge}
+              />
             )}
           </group>
         );
@@ -324,9 +364,12 @@ function DishwasherFront({ width, height, depth, material }: { width: number; he
 }
 
 /** 레일장(키큰 인출장) — 단일 키큰 전면 + 열리면 와이어 바스켓이 함께 나옴 */
-function PulloutLarder({ width, height, depth, material, active, showHandles }: { width: number; height: number; depth: number; material: MaterialColors; active: boolean; showHandles: boolean }) {
+function PulloutLarder({ width, height, depth, material, active, showHandles, revealInterior = false }: { width: number; height: number; depth: number; material: MaterialColors; active: boolean; showHandles: boolean; revealInterior?: boolean }) {
   const ref = useRef<Group>(null);
-  const frontZ = depth / 2 + 0.03;
+  const frontZ = frontPanelZ(depth);
+  const faceWidth = frontFaceWidth(width);
+  const faceGhost = frontPanelProps(revealInterior, active);
+  const showInterior = active || revealInterior;
   useFrame((_, delta) => {
     if (!ref.current) return;
     const target = active ? frontZ + depth * 0.52 : frontZ;
@@ -335,9 +378,9 @@ function PulloutLarder({ width, height, depth, material, active, showHandles }: 
   const baskets = [0.24, 0.42, 0.6, 0.78];
   return (
     <group ref={ref} position={[0, 0, frontZ]}>
-      <Panel size={[width * 0.92, height - 0.02, 0.02]} position={[0, height / 2, 0]} color={material.color} edge={material.edge} />
+      <Panel size={[faceWidth, height - 0.012, FRONT_PANEL_T]} position={[0, height / 2, 0]} color={material.color} edge={material.edge} {...faceGhost} />
       {showHandles && <Trim size={[0.02, height * 0.5, 0.03]} position={[width * 0.4, height / 2, 0.03]} color={material.edge} />}
-      {active &&
+      {showInterior &&
         baskets.map((fy, i) => (
           <group key={i} position={[0, height * fy, -depth * 0.34]}>
             <Trim size={[width * 0.74, 0.05, 0.012]} position={[0, -0.025, 0.16]} color="#c7ced6" />
@@ -546,11 +589,16 @@ export function KitchenBaseModule({
   const frontZ = depth / 2 + 0.03;
   const resolvedDoorCount = resolveDoorCount(moduleType, doorCount);
   const bodyOffsetY = KITCHEN_TOE_KICK_M;
-  const showInterior = shouldShowInteriorHints(viewMode) || selected;
+  const hasCustomFront = ["drawer", "pullout", "cooktop", "gas", "microwave", "oven", "dishwasher"].includes(moduleType);
+  const revealInterior = selected && !dragging && selectedTarget === "module";
+  const moduleViewMode = resolveModuleViewMode(viewMode, revealInterior);
+  const showInterior = !hasCustomFront && shouldShowInteriorHints(moduleViewMode, revealInterior);
   const handleHitboxCount = Math.min(Math.max(resolvedDoorCount, 0), 2);
-  const animateOpen = selected && !dragging && selectedTarget === "module";
-  // 문열기 모드에서만 서랍·풀아웃 내부(레일·통)를 보여준다 — 닫힌 상태는 전면판만
+  const animateOpen = revealInterior;
   const openAll = viewMode === "doors_open";
+  const animateDrawers =
+    openAll ||
+    (revealInterior && ["drawer", "pullout", "cooktop", "gas"].includes(moduleType));
 
   return (
     <group position={[x, y, 0]}>
@@ -564,13 +612,14 @@ export function KitchenBaseModule({
           material={material}
           doorStyle={doorStyle}
           showHandles={showHandles && moduleType !== "open"}
-          viewMode={viewMode}
+          viewMode={moduleViewMode}
           showInterior={showInterior}
           doorSwing={doorSwing}
           animatedOpen={animateOpen && resolvedDoorCount > 0}
+          revealInterior={revealInterior}
         />
         {moduleType === "drawer" && (
-          <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={drawerCount} active={openAll} mode="drawer" showHandles={showHandles} />
+          <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={drawerCount} active={animateDrawers} mode="drawer" showHandles={showHandles} revealInterior={revealInterior} />
         )}
         {selected && selectedTarget === "module" && onShelfCountChange && !["drawer", "pullout", "microwave", "oven", "dishwasher"].includes(moduleType) && (
           <ShelfInlineControls
@@ -592,7 +641,7 @@ export function KitchenBaseModule({
           />
         )}
         {moduleType === "pullout" && (
-          <PulloutLarder width={width} height={height} depth={depth} material={material} active={openAll} showHandles={showHandles} />
+          <PulloutLarder width={width} height={height} depth={depth} material={material} active={animateDrawers} showHandles={showHandles} revealInterior={revealInterior} />
         )}
         {moduleType === "open" && (
           <AnimatedOpenShelfCue width={width} height={height} depth={depth} material={material} active={openAll} />
@@ -600,7 +649,7 @@ export function KitchenBaseModule({
         {/* 쿡탑·가스장: 하부 서랍 + 카운터 위 상판/화구 */}
         {(moduleType === "cooktop" || moduleType === "gas") && (
           <>
-            <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={2} active={openAll} mode="drawer" showHandles={showHandles} />
+            <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={2} active={animateDrawers} mode="drawer" showHandles={showHandles} revealInterior={revealInterior} />
             <CooktopTop width={width} height={height} depth={depth} gas={moduleType === "gas"} />
           </>
         )}
@@ -729,16 +778,19 @@ export function KitchenWallModule({
 }) {
   const t = 0.016;
   const innerWidth = Math.max(width - t * 2, 0.04);
+  const revealInterior = selected && !dragging && selectedTarget === "module";
+  const moduleViewMode = resolveModuleViewMode(viewMode, revealInterior);
+  const shell = carcassShellProps(revealInterior);
   const shelfPositionsY = Array.from({ length: Math.max(0, shelfCount) }).map((_, index) => t + ((height - t * 2) * (index + 1)) / (Math.max(0, shelfCount) + 1));
 
   return (
     <group position={[x, y, 0]}>
       {/* 몸통 = 백색 멜라민 합판(carcass) — 문짝만 선택 소재 */}
-      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
-      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
-      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
-      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
-      <Panel size={[width, height, t * 0.55]} position={[0, height / 2, -depth / 2 + t * 0.28]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
+      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
+      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
+      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
+      <Panel size={[width, height, t * 0.55]} position={[0, height / 2, -depth / 2 + t * 0.28]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
       {Array.from({ length: Math.max(0, shelfCount) }).map((_, index) => (
         <Panel
           key={`wall-shelf-${index}`}
@@ -769,9 +821,10 @@ export function KitchenWallModule({
           material={material}
           doorStyle={doorStyle}
           showHandles={showHandles}
-          viewMode={viewMode}
+          viewMode={moduleViewMode}
           doorSwing={doorSwing}
-          animatedOpen={selected && !dragging && selectedTarget === "module"}
+          animatedOpen={revealInterior}
+          revealInterior={revealInterior}
           shelfPositionsY={shelfPositionsY}
         />
       )}

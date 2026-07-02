@@ -24,7 +24,7 @@ import { ModuleStripPlan } from "@/components/editor/ModuleStripPlan";
 import { ModuleListEditor } from "@/components/editor/ModuleListEditor";
 import { KitchenDrawingView } from "@/components/admin/KitchenDrawingView";
 import { KitchenPresetPicker } from "@/components/preview3d/controls/KitchenPresetPicker";
-import { KITCHEN_PRESETS, applyKitchenPreset, type KitchenPreset } from "@/lib/kitchenPresets";
+import { KITCHEN_PRESETS, applyKitchenPreset, kitchenTemplateIdForWidth, type KitchenPreset } from "@/lib/kitchenPresets";
 import { getEditorCategories } from "@/lib/productEditorSchema";
 import { applyStartPreset } from "@/lib/startPresets";
 import { autoArrange, getFootprint, ROOM_BACK, type Placement, type RoomItem } from "@/components/preview3d/roomLayout";
@@ -907,13 +907,19 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     setCanvasMode("edit");
   }
 
-  // 상하부장 세트를 표준 프리셋(일자 2400/2700/3000·ㄱ자)으로 방에 추가 — 규격별 상품처럼 고른다
+  // 상하부장 세트를 표준 프리셋(일자 1800/2400/2700/3000·ㄱ자)으로 방에 추가
   function addKitchenSetToRoom(preset: KitchenPreset) {
     const base = getInitialInput("kitchen_full_set");
+    const moduleCount = preset.input.kitchen_modules_mm.length;
     const merged = normalizeInput({
       ...applyKitchenPreset(base as unknown as Record<string, unknown>, preset),
       width_mm: preset.totalWidthMm,
-      door_count: preset.input.kitchen_modules_mm.length,
+      door_count: moduleCount,
+      kitchen_template: kitchenTemplateIdForWidth(preset.totalWidthMm),
+      kitchen_drawer_counts: preset.input.kitchen_module_types.map((type) => (type === "drawer" ? 3 : 3)),
+      kitchen_base_shelf_counts: Array.from({ length: moduleCount }, () => 1),
+      kitchen_wall_shelf_counts: Array.from({ length: moduleCount }, () => 1),
+      kitchen_door_swings: Array.from({ length: moduleCount }, () => "pair" as const),
     } as unknown as FurnitureInput);
     const item = addConfiguredItem("kitchen_full_set", `${productLabels.kitchen_full_set ?? "상하부장 세트"} ${preset.label}`, merged, 1);
     setViewMode("room");
@@ -1051,13 +1057,20 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       kitchen_modules_mm: [...template.modules],
       kitchen_base_modules_mm: [...template.modules],
       kitchen_wall_modules_mm: [...template.modules],
-      kitchen_module_types: template.modules.map(() => "door"),
-      kitchen_drawer_counts: template.modules.map(() => 3),
+      kitchen_module_types: template.modules.map((_, index) => {
+        if (index === template.sinkModuleIndex) return "sink_base";
+        if (index === template.cooktopModuleIndex) return "cooktop";
+        return index === 0 ? "drawer" : "door";
+      }),
+      kitchen_drawer_counts: template.modules.map((_, index) => (index === 0 ? 3 : 3)),
       kitchen_base_shelf_counts: template.modules.map(() => Math.max(1, current.shelf_count ?? 1)),
       kitchen_wall_shelf_counts: template.modules.map(() => 1),
       kitchen_door_swings: template.modules.map(() => "pair"),
       kitchen_base_hidden_indices: [],
       kitchen_wall_hidden_indices: [],
+      sink_module_index: template.sinkModuleIndex,
+      cooktop_module_index: template.cooktopModuleIndex,
+      hood_module_index: template.cooktopModuleIndex,
     }));
   }
 
@@ -2206,7 +2219,7 @@ function getInitialInput(productType: ProductType): FurnitureInput {
       material: "UV 하이그로시 화이트",
       color: "무광 화이트",
       countertop_type: "pt_white",
-      toe_kick_option: "standard_100",
+      toe_kick_option: "none",
       sink_option: "none",
       faucet_option: "none",
       drawer_module_count: 0,
@@ -2289,6 +2302,7 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
   const width = fixedModules ? fixedModules.reduce((sum, moduleWidth) => sum + moduleWidth, 0) : (kitchenTemplate?.width_mm ?? input.width_mm);
   const isKitchenSet = input.productType === "kitchen_full_set";
   const isKitchenBase = input.productType === "kitchen_base_cabinet";
+  const isKitchenIsland = input.productType === "kitchen_island";
   return {
     ...input,
     width_mm: width,
@@ -2297,8 +2311,8 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
     has_door: hasDoor,
     door_count: getSafeDoorCount(input.productType, width, hasDoor, input.door_count),
     kitchen_template: kitchenTemplate?.id ?? input.kitchen_template,
-    countertop_type: isKitchenSet || isKitchenBase ? (input.countertop_type ?? "none") : input.countertop_type,
-    toe_kick_option: isKitchenSet || isKitchenBase ? (input.toe_kick_option ?? "none") : input.toe_kick_option,
+    countertop_type: isKitchenSet || isKitchenBase || isKitchenIsland ? (input.countertop_type ?? "none") : input.countertop_type,
+    toe_kick_option: isKitchenIsland ? "none" : isKitchenSet || isKitchenBase ? (input.toe_kick_option ?? "none") : input.toe_kick_option,
     sink_option: isKitchenSet || isKitchenBase ? (input.sink_option ?? "none") : input.sink_option,
     faucet_option: isKitchenSet || isKitchenBase ? (input.faucet_option ?? "none") : input.faucet_option,
     hood_option: isKitchenSet ? (input.hood_option ?? "none") : input.hood_option,

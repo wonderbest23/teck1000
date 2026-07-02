@@ -204,7 +204,7 @@ export function Preview3D({
       return;
     }
     if (isStorageProduct) {
-      setStorageSelected(true);
+      setStorageSelected((current) => !current);
       return;
     }
     if (editor.consumeLayerClickSuppression()) return;

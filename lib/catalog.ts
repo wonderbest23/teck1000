@@ -119,6 +119,11 @@ export const roomAddPresets: Partial<Record<ProductType, RoomAddPreset[]>> = {
     { label: "2400", width_mm: 2400, height_mm: 2400, depth_mm: 600 },
     { label: "3000", width_mm: 3000, height_mm: 2400, depth_mm: 600 },
   ],
+  kitchen_full_set: [
+    { label: "1800", width_mm: 1800, height_mm: 850, depth_mm: 600 },
+    { label: "2400", width_mm: 2400, height_mm: 850, depth_mm: 600 },
+    { label: "3000", width_mm: 3000, height_mm: 850, depth_mm: 600 },
+  ],
 };
 
 /** 홈 카드용 시작 예상가(원) — "예상가 ~" 표기 */

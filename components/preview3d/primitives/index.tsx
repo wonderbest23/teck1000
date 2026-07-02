@@ -47,7 +47,7 @@ export function StudioRectLights({ scale = 1 }: { scale?: number }) {
     </>
   );
 }
-import { getDoorOpenAngle, isDoorTransparent, shouldRenderDoors, shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
+import { carcassShellProps, getDoorOpenAngle, INTERIOR_FRONT_OPACITY, isDoorTransparent, shouldRenderDoors, shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
 import { lighten } from "@/components/preview3d/materials";
 import type { DoorStyle, DoorSwing, MaterialColors, PreviewViewMode } from "@/components/preview3d/types";
 
@@ -322,11 +322,15 @@ function DoorLeaf({
       const target = isTopHinge ? -targetAngle : targetAngle;
       ref.current.rotation.x += (target - ref.current.rotation.x) * lerp;
       ref.current.rotation.y += (0 - ref.current.rotation.y) * lerp;
+      if (Math.abs(ref.current.rotation.x - target) < 0.0008) ref.current.rotation.x = target;
+      if (Math.abs(ref.current.rotation.y) < 0.0008) ref.current.rotation.y = 0;
       return;
     }
     const target = targetAngle * openDirection;
     ref.current.rotation.y += (target - ref.current.rotation.y) * lerp;
     ref.current.rotation.x += (0 - ref.current.rotation.x) * lerp;
+    if (Math.abs(ref.current.rotation.y - target) < 0.0008) ref.current.rotation.y = target;
+    if (Math.abs(ref.current.rotation.x) < 0.0008) ref.current.rotation.x = 0;
   });
 
   return (
@@ -379,6 +383,7 @@ export function Doors({
   hingeSide = "side",
   doorSwing = "pair",
   animatedOpen = false,
+  revealInterior = false,
   shelfPositionsY = [],
 }: {
   count: number;
@@ -393,6 +398,7 @@ export function Doors({
   hingeSide?: "side" | "bottom" | "top";
   doorSwing?: DoorSwing;
   animatedOpen?: boolean;
+  revealInterior?: boolean;
   shelfPositionsY?: number[];
 }) {
   if (count <= 0 || !shouldRenderDoors(viewMode)) return null;
@@ -402,10 +408,10 @@ export function Doors({
   const doorHeight = verticalSplit ? Math.max((height - gap * (count + 1)) / count, 0.08) : Math.max(height - gap * 2, 0.08);
   const doorWidth = verticalSplit ? Math.max(width - gap * 2, 0.04) : Math.max((width - gap * (count + 1)) / count, 0.04);
   const z = depth / 2 + thickness * 0.52;
-  const transparent = isDoorTransparent(viewMode);
+  const transparent = isDoorTransparent(viewMode, revealInterior);
   const openAngle = animatedOpen ? Math.PI * 0.42 : getDoorOpenAngle(viewMode);
-  const doorOpacity = transparent ? 0.14 : 1;
-  const showHinges = openAngle > 0.001 || shouldShowInteriorHints(viewMode);
+  const doorOpacity = transparent ? (revealInterior ? INTERIOR_FRONT_OPACITY : 0.14) : 1;
+  const showHinges = openAngle > 0.001 || shouldShowInteriorHints(viewMode, revealInterior);
 
   return (
     <group>
@@ -520,6 +526,7 @@ export function SlidingDoors({
   viewMode,
   open = false,
   openDirection = "right",
+  revealInterior = false,
 }: {
   width: number;
   height: number;
@@ -530,10 +537,11 @@ export function SlidingDoors({
   viewMode: PreviewViewMode;
   open?: boolean;
   openDirection?: "left" | "right";
+  revealInterior?: boolean;
 }) {
   if (!shouldRenderDoors(viewMode)) return null;
-  const transparent = isDoorTransparent(viewMode);
-  const opacity = transparent ? 0.16 : 1;
+  const transparent = isDoorTransparent(viewMode, revealInterior);
+  const opacity = transparent ? (revealInterior ? INTERIOR_FRONT_OPACITY : 0.16) : 1;
   const overlap = 0.04;
   const panelWidth = Math.max((width + overlap) / 2, 0.12);
   const frontZ = depth / 2 + thickness * 1.6;
@@ -593,6 +601,7 @@ export function SimpleCabinet({
   showInterior = false,
   doorSwing = "pair",
   animatedOpen = false,
+  revealInterior = false,
 }: {
   width: number;
   height: number;
@@ -608,20 +617,22 @@ export function SimpleCabinet({
   showInterior?: boolean;
   doorSwing?: DoorSwing;
   animatedOpen?: boolean;
+  revealInterior?: boolean;
 }) {
   const t = 0.018;
   const innerWidth = Math.max(width - t * 2, 0.04);
-  const faint = showInterior;
+  const faint = showInterior || revealInterior;
+  const shell = carcassShellProps(revealInterior);
   const shelfPositionsY = Array.from({ length: shelfCount }).map((_, index) => t + ((height - t * 2) * (index + 1)) / (shelfCount + 1));
 
   return (
     <group position={[x, y, 0]}>
       {/* 몸통(측판·상하판·뒷판·선반) = 백색 멜라민 합판 — 문짝(선택 소재)과 실제처럼 구분 */}
-      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
-      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
-      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
-      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
-      <Panel size={[width, height, t * 0.6]} position={[0, height / 2, -depth / 2 + t * 0.3]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass />
+      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
+      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
+      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
+      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
+      <Panel size={[width, height, t * 0.6]} position={[0, height / 2, -depth / 2 + t * 0.3]} color={CARCASS_FINISH.color} edge={CARCASS_FINISH.edge} carcass {...shell} />
       {Array.from({ length: shelfCount }).map((_, index) => {
         const shelfY = shelfPositionsY[index];
         return (
@@ -657,6 +668,7 @@ export function SimpleCabinet({
         viewMode={viewMode}
         doorSwing={doorSwing}
         animatedOpen={animatedOpen}
+        revealInterior={revealInterior}
         shelfPositionsY={shelfPositionsY}
       />
     </group>

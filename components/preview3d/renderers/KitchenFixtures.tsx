@@ -15,6 +15,19 @@ export function CountertopTrim({ width, y, depth, countertopId }: { width: numbe
   );
 }
 
+/** 아일랜드 상판 — 본체 대비 오버행(전후좌우 돌출) */
+export function IslandCountertopTrim({ width, y, depth, countertopId }: { width: number; y: number; depth: number; countertopId: string }) {
+  const overhangW = 0.06;
+  const overhangD = 0.05;
+  return (
+    <Trim
+      size={[width + overhangW, KITCHEN_COUNTERTOP_M, depth + overhangD]}
+      position={[0, y + KITCHEN_COUNTERTOP_M / 2, 0]}
+      color={countertopId === "stainless" ? "#94a3b8" : "#e5e7eb"}
+    />
+  );
+}
+
 /** 상판(슬랩) — 싱크 위치에 실제 컷아웃(구멍)을 낸 4분할 슬랩.
  *  구멍이 실제로 뚫려 있어 그 안의 싱크볼 내부(벽·바닥·배수구)가 그대로 보인다. */
 export function CountertopWithCutout({

@@ -206,6 +206,33 @@ export function generateParts(productType: ProductType, input: FurnitureInput): 
     ];
   }
 
+  if (productType === "kitchen_island") {
+    const countertop = getCountertopOption(input.countertop_type);
+    const inner = Math.max(input.width_mm - BOARD_THICKNESS_MM * 2, 1);
+    const epHeight = input.height_mm + 100;
+    const epNote = `${doorStyleLabel(input.door_style)} · 4면 엣지 · carcass·조절발 마감`;
+    return [
+      { name: "좌측판", width_mm: input.height_mm, height_mm: input.depth_mm, quantity: 1, material: input.material, color: input.color, note: "내부 carcass" },
+      { name: "우측판", width_mm: input.height_mm, height_mm: input.depth_mm, quantity: 1, material: input.material, color: input.color, note: "내부 carcass" },
+      { name: "상판", width_mm: inner, height_mm: input.depth_mm, quantity: 1, material: input.material, color: input.color },
+      { name: "하판", width_mm: inner, height_mm: input.depth_mm, quantity: 1, material: input.material, color: input.color },
+      { name: "내부 선반", width_mm: inner, height_mm: input.depth_mm, quantity: input.shelf_count, material: input.material, color: input.color },
+      { name: "엔드패널(EP)", width_mm: epHeight, height_mm: input.depth_mm, quantity: 2, material: input.material, color: input.color, note: `좌·우 측면 ${epNote}` },
+      { name: "백패널(EP)", width_mm: input.width_mm, height_mm: epHeight, quantity: 1, material: input.material, color: input.color, note: `후면 ${epNote}` },
+      { name: "조절발 세트", width_mm: 100, height_mm: 100, quantity: Math.max(4, Math.ceil(input.width_mm / 600) + 1), material: "부속 품목", color: "-", note: "아일랜드 하부 조절발(걸레받이 없음)" },
+      ...doorParts({ ...input, has_door: true }),
+      {
+        name: "주방 상판",
+        width_mm: input.width_mm + 60,
+        height_mm: input.depth_mm + 50,
+        quantity: countertop.id === "none" ? 0 : 1,
+        material: countertop.material,
+        color: countertop.color,
+        note: `${countertop.name} · 오버행 포함`,
+      },
+    ].filter((part) => part.quantity > 0);
+  }
+
   if (productType === "kitchen_full_set") {
     const template = getKitchenTemplate(input.kitchen_template);
     const dimensions = getKitchenSetDimensions(input, template);
@@ -433,6 +460,9 @@ export function generateParts(productType: ProductType, input: FurnitureInput): 
   }
 
   // shoe_cabinet
+  if (productType !== "shoe_cabinet") {
+    return bodyParts(input, "선반", Boolean(input.back_panel));
+  }
   const shoeBody = bodyParts({ ...input, shelf_count: input.shelf_count }, "신발 선반", true);
   const shoeParts: Part[] = [...shoeBody, ...storageDoorParts({ ...input, has_door: true }), ...storageDrawerParts(input)];
   if (input.shoe_shelf_angle) {
@@ -456,7 +486,7 @@ export function generateEdgeTasks(parts: Part[], productType: ProductType): Edge
       return { part_name: part.name, front_edge: false, back_edge: false, left_edge: false, right_edge: false, total_edge_length_mm: 0, note: "엣지 없음" };
     }
 
-    if (part.name.includes("문짝") || part.name.includes("슬라이딩 도어") || part.name.includes("앞판")) {
+    if (part.name.includes("문짝") || part.name.includes("슬라이딩 도어") || part.name.includes("앞판") || part.name.includes("엔드패널") || part.name.includes("백패널(EP)")) {
       return {
         part_name: part.name,
         front_edge: true,
@@ -633,6 +663,12 @@ export function generateSiteTasks(productType: ProductType, input: FurnitureInpu
       { category: "조정", name: "상판 현장 미세 조정", quantity: 1, responsible: R, note: "벽 라인·돌출부에 맞춰 현장 재단/마감" },
       { category: "조정", name: "벽면 수평·돌출부 조정", quantity: 1, responsible: R, note: "벽 돌출/수평 불량 현장 조정" },
       { category: "연결", name: "배관·수전·전기·가스 연결", quantity: 1, responsible: R, note: "설치 시 시공자 연결 (제품 제작 범위 외)" },
+    );
+  } else if (productType === "kitchen_island") {
+    tasks.push(
+      { category: "조정", name: "아일랜드 상판 오버행 마감", quantity: 1, responsible: R, note: "상판 돌출부 라운드/엣지 현장 마감" },
+      { category: "조정", name: "아일랜드 EP·조절발 현장 수평", quantity: 1, responsible: R, note: "바닥 수평에 맞춰 조절발 높이 조정(걸레받이 없음)" },
+      { category: "연결", name: "아일랜드 전기·가스·급배수 연결", quantity: 1, responsible: R, note: "조리대/쿡탑/싱크 설치 시 현장 연결" },
     );
   } else if (productType === "kitchen_wall_cabinet") {
     tasks.push({ category: "타공", name: "후드/배기 간섭부 확인", quantity: 1, responsible: R, note: "상부장 설치 시 배기 덕트·콘센트 간섭 현장 확인" });

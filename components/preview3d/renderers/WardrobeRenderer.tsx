@@ -23,7 +23,7 @@ import {
   type WardrobeModuleType,
 } from "@/lib/wardrobe";
 import { productRules } from "@/lib/rules";
-import { shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
+import { carcassShellProps, resolveModuleViewMode, shouldShowInteriorHints } from "@/components/preview3d/modes/visibilityModes";
 import type { DoorSwing, MaterialColors, PreviewRendererProps, PreviewViewMode } from "@/components/preview3d/types";
 
 function HangingRod({ x1, x2, y, z = 0 }: { x1: number; x2: number; y: number; z?: number }) {
@@ -264,17 +264,19 @@ function WardrobeModule({
     type === "shelf"
       ? Array.from({ length: Math.max(1, shelfCount) }).map((_, index) => t + ((height - t * 2) * (index + 1)) / (Math.max(1, shelfCount) + 1))
       : [];
-  // 문열림·X-ray 등 내부 표시 모드에서만 레일·선반 내부 디테일
-  const revealInterior = shouldShowInteriorHints(viewMode);
+  // 선택·문열림 시 X-ray — Orbit 회전해도 내부(선반·서랍) 확인
+  const revealInterior = selected || shouldShowInteriorHints(viewMode);
+  const shell = carcassShellProps(selected);
+  const moduleViewMode = resolveModuleViewMode(viewMode, selected);
 
   return (
     <group position={[x, 0, 0]}>
       {/* 모듈 몸통 */}
-      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[width, height, t * 0.55]} position={[0, height / 2, -depth / 2 + t * 0.28]} color={lighten(material.color)} edge={material.edge} />
+      <Panel size={[t, height, depth]} position={[-width / 2 + t / 2, height / 2, 0]} color={material.color} edge={material.edge} {...shell} />
+      <Panel size={[t, height, depth]} position={[width / 2 - t / 2, height / 2, 0]} color={material.color} edge={material.edge} {...shell} />
+      <Panel size={[innerWidth, t, depth]} position={[0, height - t / 2, 0]} color={material.color} edge={material.edge} {...shell} />
+      <Panel size={[innerWidth, t, depth]} position={[0, t / 2, 0]} color={material.color} edge={material.edge} {...shell} />
+      <Panel size={[width, height, t * 0.55]} position={[0, height / 2, -depth / 2 + t * 0.28]} color={lighten(material.color)} edge={material.edge} {...shell} />
 
       <WardrobeModuleInterior
         type={type}
@@ -298,9 +300,10 @@ function WardrobeModule({
           material={material}
           doorStyle={doorStyle}
           showHandles={showHandles}
-          viewMode={viewMode}
+          viewMode={moduleViewMode}
           doorSwing={doorSwing}
           animatedOpen={selected}
+          revealInterior={selected}
           shelfPositionsY={doorShelfPositionsY}
         />
       )}

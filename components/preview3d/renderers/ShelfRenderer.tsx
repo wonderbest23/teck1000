@@ -6,6 +6,7 @@ import { getMaterialPreset, lighten, materialPresets } from "@/components/previe
 import { StorageEditLayer, getStorageDimensionLimits } from "@/components/preview3d/controls/StorageSceneControls";
 import { BoxDimensions } from "@/components/preview3d/primitives/DimensionMarkers";
 import { StorageDrawers } from "@/components/preview3d/renderers/StorageDrawers";
+import { carcassShellProps, resolveModuleViewMode } from "@/components/preview3d/modes/visibilityModes";
 import type { PreviewRendererProps } from "@/components/preview3d/types";
 
 export function ShelfRenderer({
@@ -44,16 +45,19 @@ export function ShelfRenderer({
   );
   const isSliding = hasDoors && (input.open_type ?? "").includes("슬라이딩");
   const openAll = viewMode === "doors_open";
+  const revealInterior = selected;
+  const moduleViewMode = resolveModuleViewMode(viewMode, revealInterior);
+  const shell = carcassShellProps(revealInterior);
   const doorsOpenOnSelect = selected || openAll;
 
   return (
     <group rotation={[0, frontView ? 0 : -0.38, 0]}>
       {!embedded && <PreviewRoom widthM={w} depthM={d} floorY={0} topY={h} />}
-      <Panel size={[t, h, d]} position={[-w / 2 + t / 2, h / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[t, h, d]} position={[w / 2 - t / 2, h / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[innerWidth, t, d]} position={[0, h - t / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[innerWidth, t, d]} position={[0, t / 2, 0]} color={material.color} edge={material.edge} />
-      <Panel size={[w, h, t * 0.6]} position={[0, h / 2, -d / 2 + t * 0.3]} color={lighten(material.color)} edge={material.edge} />
+      <Panel size={[t, h, d]} position={[-w / 2 + t / 2, h / 2, 0]} color={material.color} edge={material.edge} {...shell} />
+      <Panel size={[t, h, d]} position={[w / 2 - t / 2, h / 2, 0]} color={material.color} edge={material.edge} {...shell} />
+      <Panel size={[innerWidth, t, d]} position={[0, h - t / 2, 0]} color={material.color} edge={material.edge} {...shell} />
+      <Panel size={[innerWidth, t, d]} position={[0, t / 2, 0]} color={material.color} edge={material.edge} {...shell} />
+      <Panel size={[w, h, t * 0.6]} position={[0, h / 2, -d / 2 + t * 0.3]} color={lighten(material.color)} edge={material.edge} {...shell} />
       {/* 서랍 구역 상단 칸막이(고정 선반) */}
       {drawerCount > 0 && (
         <Panel size={[innerWidth, t, d * 0.96]} position={[0, upperBottom + t / 2, 0]} color={material.color} edge={material.edge} />
@@ -75,7 +79,7 @@ export function ShelfRenderer({
           depth={d}
           count={drawerCount}
           material={material}
-          open={openAll}
+          open={openAll || revealInterior}
           showHandles={input.handle_type !== "무손잡이"}
         />
       )}
@@ -88,9 +92,10 @@ export function ShelfRenderer({
             thickness={t}
             material={material}
             doorStyle={doorStyle}
-            viewMode={viewMode}
+            viewMode={moduleViewMode}
             open={doorsOpenOnSelect}
             openDirection={(input.door_swing ?? "right") === "left" ? "left" : "right"}
+            revealInterior={revealInterior}
           />
         </group>
       )}
@@ -105,9 +110,10 @@ export function ShelfRenderer({
             material={material}
             doorStyle={doorStyle}
             showHandles={input.handle_type !== "무손잡이"}
-            viewMode={viewMode}
+            viewMode={moduleViewMode}
             doorSwing={input.door_swing ?? "pair"}
             animatedOpen={selected}
+            revealInterior={revealInterior}
             shelfPositionsY={doorShelfPositionsY}
           />
         </group>
