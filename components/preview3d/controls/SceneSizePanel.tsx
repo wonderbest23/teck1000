@@ -150,7 +150,10 @@ export function SceneSizePanel({
           ))}
         </div>
       ))}
-      <p className="text-[9px] font-bold leading-4 text-slate-400">단위 mm · −/＋ 또는 직접 입력 후 Enter</p>
+      <p className="text-[9px] font-bold leading-4 text-slate-400">
+        단위 mm · −/＋ 또는 직접 입력 후 Enter
+        <span className="mt-0.5 hidden sm:block">단축키: 화살표 이동 · Shift+화살표 크기 · Alt+↑↓ 깊이 · R 회전 · Del 삭제 · Esc 해제</span>
+      </p>
       {materials && (
         <div className="space-y-1.5 border-t border-slate-100 pt-2">
           <div className="text-[10px] font-black text-slate-400">소재</div>

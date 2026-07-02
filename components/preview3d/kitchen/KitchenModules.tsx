@@ -535,6 +535,8 @@ export function KitchenBaseModule({
   const showInterior = shouldShowInteriorHints(viewMode) || selected;
   const handleHitboxCount = Math.min(Math.max(resolvedDoorCount, 0), 2);
   const animateOpen = selected && !dragging && selectedTarget === "module";
+  // 문열기 모드 — 문짝뿐 아니라 서랍·풀아웃·오픈장도 함께 열어 내부를 보여준다
+  const openAll = animateOpen || viewMode === "doors_open";
 
   return (
     <group position={[x, y, 0]}>
@@ -554,7 +556,7 @@ export function KitchenBaseModule({
           animatedOpen={animateOpen && resolvedDoorCount > 0}
         />
         {moduleType === "drawer" && (
-          <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={drawerCount} active={animateOpen} mode="drawer" showHandles={showHandles} />
+          <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={drawerCount} active={openAll} mode="drawer" showHandles={showHandles} />
         )}
         {selected && selectedTarget === "module" && onShelfCountChange && !["drawer", "pullout", "microwave", "oven", "dishwasher"].includes(moduleType) && (
           <ShelfInlineControls
@@ -576,15 +578,15 @@ export function KitchenBaseModule({
           />
         )}
         {moduleType === "pullout" && (
-          <PulloutLarder width={width} height={height} depth={depth} material={material} active={animateOpen} showHandles={showHandles} />
+          <PulloutLarder width={width} height={height} depth={depth} material={material} active={openAll} showHandles={showHandles} />
         )}
         {moduleType === "open" && (
-          <AnimatedOpenShelfCue width={width} height={height} depth={depth} material={material} active={animateOpen} />
+          <AnimatedOpenShelfCue width={width} height={height} depth={depth} material={material} active={openAll} />
         )}
         {/* 쿡탑·가스장: 하부 서랍 + 카운터 위 상판/화구 */}
         {(moduleType === "cooktop" || moduleType === "gas") && (
           <>
-            <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={2} active={animateOpen} mode="drawer" showHandles={showHandles} />
+            <AnimatedDrawerStack width={width} height={height} depth={depth} material={material} count={2} active={openAll} mode="drawer" showHandles={showHandles} />
             <CooktopTop width={width} height={height} depth={depth} gas={moduleType === "gas"} />
           </>
         )}

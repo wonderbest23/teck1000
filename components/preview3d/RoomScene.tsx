@@ -138,8 +138,11 @@ function DraggableItem({
   const Renderer = getPreviewRenderer(item.input.productType);
   if (!Renderer) return null;
 
-  function toWorld(clientX: number, clientY: number) {
+  // planeY: 드래그 기준 평면의 높이 — 핸들이 떠 있는 높이와 같아야 커서와 1:1로 따라온다
+  // (기존엔 항상 바닥 y=0 평면이라 시점에 따라 커서보다 크게/작게 움직이는 패럴랙스 버그가 있었다)
+  function toWorld(clientX: number, clientY: number, planeY = 0) {
     const rect = gl.domElement.getBoundingClientRect();
+    helpers.plane.constant = -planeY;
     helpers.v2.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     helpers.ray.setFromCamera(helpers.v2, camera);
     return helpers.ray.ray.intersectPlane(helpers.plane, helpers.hit);
@@ -155,20 +158,23 @@ function DraggableItem({
   function startHandleDrag(event: { stopPropagation: () => void; clientX: number; clientY: number }) {
     event.stopPropagation();
     onSelect(item.id);
-    const start = toWorld(event.clientX, event.clientY);
+    const planeY = topY + 0.12; // 핸들 높이의 평면에서 계산 — 커서 추종 1:1
+    const start = toWorld(event.clientX, event.clientY, planeY);
     const offX = start ? placement.x - start.x : 0;
     const offZ = start ? placement.z - start.z : 0;
     function move(ev: PointerEvent) {
-      const p = toWorld(ev.clientX, ev.clientY);
+      const p = toWorld(ev.clientX, ev.clientY, planeY);
       if (p) onMove(item.id, p.x + offX, p.z + offZ);
     }
     function up() {
       onMoveEnd();
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
     }
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
 
   const bottomY = footprint.baseY;
@@ -187,8 +193,10 @@ function DraggableItem({
     const half = (axis === "x" ? footprint.widthM : footprint.depthM) / 2;
     // 반대편(잡은 쪽의 −면) 모서리 = 고정 앵커
     const anchor = { x: placement.x - dir.x * half, z: placement.z - dir.z * half };
+    // 핸들이 떠 있는 높이의 평면에서 계산 — 바닥 평면 기준일 때 생기던 "커서보다 훨씬 크게 늘어나는" 패럴랙스 제거
+    const planeY = axis === "x" ? centerY : bottomY + boxHeight * 0.18;
     function move(ev: PointerEvent) {
-      const p = toWorld(ev.clientX, ev.clientY);
+      const p = toWorld(ev.clientX, ev.clientY, planeY);
       if (!p) return;
       const size = (p.x - anchor.x) * dir.x + (p.z - anchor.z) * dir.z; // 앵커→포인터의 축방향 거리
       const sizeMm = clampW(Math.max(0.12, size) * 1000);
@@ -200,9 +208,11 @@ function DraggableItem({
       onMoveEnd();
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
     }
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
 
   // 높이 핸들 — 화면 세로 드래그(위=커짐)
@@ -212,14 +222,18 @@ function DraggableItem({
     const startClientY = event.clientY;
     const baseH = item.input.height_mm;
     function move(ev: PointerEvent) {
-      onResize(item.id, { height_mm: clampH(baseH + (startClientY - ev.clientY) * 4) });
+      // 감도 2.5px/mm — 4였을 땐 살짝만 끌어도 확 커져 제어가 어려웠다
+      onResize(item.id, { height_mm: clampH(baseH + (startClientY - ev.clientY) * 2.5) });
     }
     function up() {
+      onMoveEnd(); // 높이 스냅 가이드(y 레이저선) 지우기
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
     }
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
 
   return (
@@ -366,7 +380,8 @@ export function RoomScene({
   mobilePanelHost?: HTMLElement | null;
   showDimensions?: boolean;
   doorsOpen?: boolean;
-  guides: { axis: "x" | "z"; value: number }[];
+  /** 정렬 가이드 — x/z(바닥) + y(높이 수평 맞춤 레이저선) */
+  guides: { axis: "x" | "y" | "z"; value: number }[];
   floor: { leftX: number; rightX: number; backZ: number; frontZ: number; topY: number };
 }) {
   const foots = useMemo(() => Object.fromEntries(items.map((it) => [it.id, getFootprint(it.input)])), [items]);
@@ -742,6 +757,21 @@ export function RoomScene({
         <PreviewRoom extents={floor} floorY={0} topY={floor.topY} ceilingY={ceilingY} />
         {/* 정렬 가이드 — 다른 가구/벽과 맞으면 파란 선(글로우 + 또렷한 코어 + 살짝 솟은 면) */}
         {guides.map((g, i) => {
+          // y 가이드 — 높이 수평 맞춤: 뒷벽에 레이저 수평선(파란) 표시
+          if (g.axis === "y") {
+            return (
+              <group key={`g-y-${i}`} renderOrder={999}>
+                <mesh position={[0, g.value, floor.backZ + 0.02]}>
+                  <boxGeometry args={[roomW, 0.014, 0.014]} />
+                  <meshBasicMaterial color="#1d4ed8" toneMapped={false} transparent depthWrite={false} depthTest={false} />
+                </mesh>
+                <mesh position={[0, g.value, floor.backZ + 0.016]}>
+                  <boxGeometry args={[roomW, 0.06, 0.008]} />
+                  <meshBasicMaterial color="#3b82f6" transparent opacity={0.28} depthWrite={false} depthTest={false} />
+                </mesh>
+              </group>
+            );
+          }
           const len = g.axis === "x" ? roomD : roomW;
           const pos: [number, number, number] = g.axis === "x" ? [g.value, 0, centerZ] : [0, 0, g.value];
           const coreSize: [number, number, number] = g.axis === "x" ? [0.012, 0.012, len] : [len, 0.012, 0.012];

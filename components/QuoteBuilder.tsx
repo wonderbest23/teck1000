@@ -24,6 +24,7 @@ import { ModuleStripPlan } from "@/components/editor/ModuleStripPlan";
 import { ModuleListEditor } from "@/components/editor/ModuleListEditor";
 import { KitchenDrawingView } from "@/components/admin/KitchenDrawingView";
 import { KitchenPresetPicker } from "@/components/preview3d/controls/KitchenPresetPicker";
+import { KITCHEN_PRESETS, applyKitchenPreset, type KitchenPreset } from "@/lib/kitchenPresets";
 import { getEditorCategories } from "@/lib/productEditorSchema";
 import { autoArrange, getFootprint, ROOM_BACK, type Placement, type RoomItem } from "@/components/preview3d/roomLayout";
 import { useInputHistory } from "@/lib/hooks/useInputHistory";
@@ -131,7 +132,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   // 내 공간(멀티 가구 씬) 배치/선택
   const [roomPlacements, setRoomPlacements] = useState<Record<string, { x: number; z: number; rotY: number }>>({});
   const [roomSelected, setRoomSelected] = useState<string | null>(null);
-  const [roomGuides, setRoomGuides] = useState<{ axis: "x" | "z"; value: number }[]>([]);
+  // 정렬 가이드 — x/z(바닥 정렬) + y(높이 수평 맞춤 레이저선)
+  const [roomGuides, setRoomGuides] = useState<{ axis: "x" | "y" | "z"; value: number }[]>([]);
   const [justAddedId, setJustAddedId] = useState<string | null>(null); // 방금 추가한 가구 — 파란 테두리로 안내
   const [canvasMode, setCanvasMode] = useState<"view" | "edit">("edit"); // 보기/수정 모드 — 보기 모드는 편집 UI 없이 감상만
   const [addOpen, setAddOpen] = useState(false); // 캔버스 하단 '＋ 가구 추가' 시트
@@ -443,26 +445,67 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     });
   }
 
-  // 키보드 단축키 — 내 공간에서 가구 선택 시 Delete=제거, R=90° 회전
+  // 키보드 단축키 — 모든 편집을 키보드로도:
+  //   Esc=선택 해제/시트 닫기 · Delete=제거 · R=90° 회전(벽부착은 다음 벽)
+  //   화살표=5cm 이동 · Shift+←→=가로 ±50 · Shift+↑↓=높이 ±50 · Alt+↑↓=깊이 ±50
+  //   (기존: Ctrl+C/V 복사·붙여넣기, Ctrl+Z/Y 실행취소·다시실행)
   useEffect(() => {
-    if (viewMode !== "room" || !roomSelected) return;
+    if (viewMode !== "room") return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.key === "Escape") {
+        setAddOpen(false);
+        setPickerSlug(null);
+        setRoomSelected(null);
+        setRoomGuides([]);
+        return;
+      }
+      if (!roomSelected || canvasMode !== "edit") return;
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (roomSelected) {
-          e.preventDefault();
-          removeRoomItem(roomSelected);
-        }
-      } else if (e.key === "r" || e.key === "R" || e.key === "ㄱ") {
+        e.preventDefault();
+        removeRoomItem(roomSelected);
+        return;
+      }
+      if (e.key === "r" || e.key === "R" || e.key === "ㄱ") {
         e.preventDefault();
         rotateRoomItem(roomSelected);
+        return;
       }
+      if (!e.key.startsWith("Arrow")) return;
+      e.preventDefault();
+      const item = roomItems.find((it) => it.id === roomSelected);
+      if (!item) return;
+      const clearGuidesSoon = () => window.setTimeout(() => setRoomGuides([]), 600);
+      if (e.shiftKey) {
+        // Shift+화살표 = 크기 (←→ 가로, ↑↓ 높이 — 높이는 y 스냅 가이드와 연동)
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          resizeRoomItem(roomSelected, { width_mm: Math.max(150, item.input.width_mm + (e.key === "ArrowRight" ? 50 : -50)) });
+        } else {
+          resizeRoomItem(roomSelected, { height_mm: Math.max(120, item.input.height_mm + (e.key === "ArrowUp" ? 50 : -50)) });
+        }
+        clearGuidesSoon();
+        return;
+      }
+      if (e.altKey) {
+        // Alt+↑↓ = 깊이
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          resizeRoomItem(roomSelected, { depth_mm: Math.max(150, item.input.depth_mm + (e.key === "ArrowUp" ? 50 : -50)) });
+          clearGuidesSoon();
+        }
+        return;
+      }
+      // 화살표 = 5cm 이동 (벽부착 가구는 벽 투영 규칙 그대로)
+      const delta: Record<string, [number, number]> = { ArrowLeft: [-0.05, 0], ArrowRight: [0.05, 0], ArrowUp: [0, -0.05], ArrowDown: [0, 0.05] };
+      const [dx, dz] = delta[e.key] ?? [0, 0];
+      const p = roomPlacements[roomSelected] ?? { x: 0, z: 0, rotY: 0 };
+      moveRoomItem(roomSelected, p.x + dx, p.z + dz);
+      clearGuidesSoon();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, roomSelected]);
+  }, [viewMode, roomSelected, canvasMode, roomPlacements, roomItems]);
 
   // 복사/붙여넣기 — Ctrl+C(선택 복사) / Ctrl+V(붙여넣기)
   useEffect(() => {
@@ -565,6 +608,27 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     const item = roomItems.find((it) => it.id === id);
     if (!item) return;
     if (!center) {
+      // 높이 조절 — 다른 가구의 윗면 높이(topY)와 4cm 이내면 파란 수평 레이저선 + 자동 스냅(수평 맞춤)
+      if (patch.height_mm != null) {
+        const f = roomFootprints[id];
+        const baseY = f?.baseY ?? 0;
+        let heightMm = Math.max(120, Math.round(patch.height_mm));
+        let yGuide: { axis: "y"; value: number } | null = null;
+        const SNAP_Y = 0.04;
+        for (const other of roomItems) {
+          if (other.id === id) continue;
+          const otherTop = roomFootprints[other.id]?.topY;
+          if (otherTop == null) continue;
+          if (Math.abs(baseY + heightMm / 1000 - otherTop) < SNAP_Y) {
+            heightMm = Math.max(120, Math.round(((otherTop - baseY) * 1000) / 10) * 10);
+            yGuide = { axis: "y", value: baseY + heightMm / 1000 };
+            break;
+          }
+        }
+        setRoomGuides(yGuide ? [yGuide] : []);
+        commitRoomItemById(id, { ...item.input, ...patch, height_mm: heightMm });
+        return;
+      }
       commitRoomItemById(id, { ...item.input, ...patch });
       return;
     }
@@ -705,6 +769,24 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     setRoomSelected(item.id);
     setJustAddedId(item.id);
     setAddOpen(false);
+    setCanvasMode("edit");
+    window.setTimeout(() => setJustAddedId((cur) => (cur === item.id ? null : cur)), 3500);
+  }
+
+  // 상하부장 세트를 표준 프리셋(일자 2400/2700/3000·ㄱ자)으로 방에 추가 — 규격별 상품처럼 고른다
+  function addKitchenSetToRoom(preset: KitchenPreset) {
+    const base = getInitialInput("kitchen_full_set");
+    const merged = normalizeInput({
+      ...applyKitchenPreset(base as unknown as Record<string, unknown>, preset),
+      width_mm: preset.totalWidthMm,
+      door_count: preset.input.kitchen_modules_mm.length,
+    } as unknown as FurnitureInput);
+    const item = addConfiguredItem("kitchen_full_set", `${productLabels.kitchen_full_set ?? "상하부장 세트"} ${preset.label}`, merged, 1);
+    setViewMode("room");
+    setRoomSelected(item.id);
+    setJustAddedId(item.id);
+    setAddOpen(false);
+    setPickerSlug(null);
     setCanvasMode("edit");
     window.setTimeout(() => setJustAddedId((cur) => (cur === item.id ? null : cur)), 3500);
   }
@@ -880,7 +962,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {catalogCategories.flatMap((cat) => cat.slugs).map((slug) => {
-          const presets = roomAddPresets[slug];
+          // 상하부장 세트도 바로 추가 대신 규격(프리셋) 선택을 거친다
+          const presets = roomAddPresets[slug] ?? (slug === "kitchen_full_set" ? [] : undefined);
           const active = pickerSlug === slug;
           return (
             <button
@@ -898,7 +981,25 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
           );
         })}
       </div>
-      {pickerSlug && roomAddPresets[pickerSlug] && (
+      {pickerSlug === "kitchen_full_set" ? (
+        <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 p-2">
+          <div className="mb-1.5 text-[11px] font-black text-brand">상하부장 세트 규격 — 누르면 바로 추가돼요</div>
+          <div className="flex flex-wrap gap-1.5">
+            {KITCHEN_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                title={preset.description}
+                onClick={() => addKitchenSetToRoom(preset)}
+                className="rounded-lg bg-white px-3 py-1.5 text-left text-[12px] font-black text-slate-700 ring-1 ring-slate-200 transition hover:ring-brand active:scale-95"
+              >
+                {preset.label}
+                <span className="ml-1 text-[10px] font-bold text-slate-400">{preset.shape === "l_shape" ? "ㄱ자" : "일자"} · {preset.input.kitchen_modules_mm.length}칸</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : pickerSlug && roomAddPresets[pickerSlug] ? (
         <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 p-2">
           <div className="mb-1.5 text-[11px] font-black text-brand">{productLabels[pickerSlug] ?? pickerSlug} 규격 — 누르면 바로 추가돼요</div>
           <div className="flex flex-wrap gap-1.5">
@@ -915,7 +1016,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
             ))}
           </div>
         </div>
-      )}
+      ) : null}
     </>
   );
 

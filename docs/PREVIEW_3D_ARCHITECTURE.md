@@ -53,6 +53,10 @@ FurnitureInput (lib/types.ts)   ← 하나의 설계 상태 객체
 >
 > **오버레이 정리(RoomScene)**: 이동 핸들은 가구 중앙 대형 원 → **좌상단 모서리 작은 버튼**(h-9, factor 5). 칸 선택 시 3D 안에 뜨던 검은 인라인 카드(`SizeBadge`)는 `embedded`(방 배치 뷰)에서 숨김 — 그 기능(폭·선반/서랍 단수·문 방향·손잡이·칸 추가/삭제)은 전부 조절 패널의 칸 섹션으로 통합. Preview3D(관리자 스튜디오)에선 SizeBadge 유지. 푸터 상태 표기는 주문 검증 verdict(`ORDER_VERDICT_LABELS`) 기준으로 CTA와 통일. 상단 카테고리에서 '소재' 제거(패널 스와치로 대체).
 >
+> **키보드 단축키(RoomScene·수정 모드)**: 화살표=5cm 이동 · Shift+←→=가로 ±50 · Shift+↑↓=높이 ±50 · Alt+↑↓=깊이 ±50 · R=회전(벽부착은 다음 벽) · Del=삭제 · Esc=선택 해제/시트 닫기 · Ctrl+C/V=복사/붙여넣기 · Ctrl+Z/Y=실행취소.
+>
+> **높이 수평 맞춤(y 가이드)**: 높이 조절 시(핸들 드래그·Shift+↑↓·패널) 다른 가구의 윗면과 4cm 이내면 자동 스냅 + 뒷벽에 파란 레이저 수평선 표시(`roomGuides`의 `axis:"y"`). 문열림 모드는 문짝뿐 아니라 **서랍·풀아웃도 슬라이드로 열림**(KitchenModules `openAll`). 가구추가 시트의 상하부장 세트는 `KITCHEN_PRESETS`(일자 2400/2700/3000·ㄱ자) 규격 선택으로 추가. 드래그 리사이즈는 핸들 높이 평면(`toWorld planeY`) 기준으로 계산해 패럴랙스(제멋대로 커지는) 버그 제거.
+>
 > **벽부착 제약(현실 규칙)**: 싱크대·붙박이장 등 `WALL_BOUND_TYPES`(QuoteBuilder)는 벽에서 떨어질 수 없다 — 이동하면 `projectToWall`로 가장 가까운 벽에 등을 붙이고(rotY 자동), 옆벽으로 끌면 자동 회전. 회전 버튼은 "다음 벽으로 이동"(뒤→오른쪽→앞→왼쪽 순환). 아일랜드(kitchen_island)만 방 중앙 허용. 배치가 바뀌면 350ms 디바운스 후 카메라 프레임이 따라잡는다(RoomScene `placementsSig`).
 | `components/QuoteBuilder.tsx` | 고객 구성 화면. Preview3D / RoomScene 사용 |
 | `components/admin/KitchenPhotoStudio.tsx` | 관리자 "사진→3D·도면" 스튜디오. Preview3D + KitchenDrawingView 사용 |
