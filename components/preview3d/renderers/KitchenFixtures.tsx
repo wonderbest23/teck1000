@@ -95,8 +95,11 @@ export function CountertopWithCutout({
   );
 }
 
-const SINK_STEEL = { color: "#9aa4ac", metalness: 0.8, roughness: 0.3 } as const;
-const SINK_STEEL_DARK = { color: "#6b747c", metalness: 0.75, roughness: 0.38 } as const;
+// 일반 상판+스텐볼: 림은 폴리시(밝고 매끈), 내부는 헤어라인(어둡고 결) — 상판과 또렷한 대비
+const SINK_RIM_POLISHED = { color: "#cdd5db", metalness: 0.92, roughness: 0.16 } as const;
+const SINK_STEEL_BRUSHED = { color: "#8d979f", metalness: 0.82, roughness: 0.34 } as const;
+// 스텐 상판 일체형: 상판과 같은 톤으로 프레스 성형된 느낌(림 거의 없음)
+const SINK_STEEL_TOP = { color: "#98a3ab", metalness: 0.85, roughness: 0.28 } as const;
 
 /** 싱크볼 — 상판 컷아웃 안에 실제 볼(4벽+바닥+배수구, 더블볼은 중간 분리대) */
 export function SinkFixture({
@@ -105,6 +108,7 @@ export function SinkFixture({
   sinkOptionId,
   cabinetWidthM,
   selected,
+  countertopId = "pt_white",
   onPointerDown,
 }: {
   x: number;
@@ -112,8 +116,13 @@ export function SinkFixture({
   sinkOptionId?: string;
   cabinetWidthM: number;
   selected?: boolean;
+  /** 상판 종류 — stainless면 스텐 상판 일체형(프레스 볼), 그 외엔 상판+스텐볼 대비형 */
+  countertopId?: string;
   onPointerDown?: (clientX: number, clientY: number) => void;
 }) {
+  const steelTop = countertopId === "stainless";
+  const RIM = steelTop ? SINK_STEEL_TOP : SINK_RIM_POLISHED;
+  const INNER = steelTop ? SINK_STEEL_TOP : SINK_STEEL_BRUSHED;
   const spec = getSinkFixtureSpec(sinkOptionId, cabinetWidthM);
   const topY = counterTopY + KITCHEN_COUNTERTOP_M; // 상판 윗면
   const w = spec.widthM;
@@ -121,7 +130,7 @@ export function SinkFixture({
   const zC = 0.06;
   const bowlDepth = Math.max(0.1, Math.min(spec.bowlDepthM, 0.18));
   const wallT = 0.012;
-  const rimH = 0.012;
+  const rimH = steelTop ? 0.004 : 0.01;
   const isDouble = (sinkOptionId ?? "").includes("double");
   const bowlBottomY = topY - bowlDepth;
   const drainXs = isDouble ? [x - w / 4, x + w / 4] : [x];
@@ -146,48 +155,48 @@ export function SinkFixture({
       {/* 스텐 림 프레임 — 상판 위로 살짝 올라온 테두리 */}
       <mesh position={[x, topY + rimH / 2, zC - d / 2 + wallT / 2]}>
         <boxGeometry args={[w + wallT * 2, rimH, wallT]} />
-        <meshStandardMaterial {...SINK_STEEL} />
+        <meshStandardMaterial {...RIM} />
       </mesh>
       <mesh position={[x, topY + rimH / 2, zC + d / 2 - wallT / 2]}>
         <boxGeometry args={[w + wallT * 2, rimH, wallT]} />
-        <meshStandardMaterial {...SINK_STEEL} />
+        <meshStandardMaterial {...RIM} />
       </mesh>
       <mesh position={[x - w / 2 - wallT / 2, topY + rimH / 2, zC]}>
         <boxGeometry args={[wallT, rimH, d]} />
-        <meshStandardMaterial {...SINK_STEEL} />
+        <meshStandardMaterial {...RIM} />
       </mesh>
       <mesh position={[x + w / 2 + wallT / 2, topY + rimH / 2, zC]}>
         <boxGeometry args={[wallT, rimH, d]} />
-        <meshStandardMaterial {...SINK_STEEL} />
+        <meshStandardMaterial {...RIM} />
       </mesh>
       {/* 볼 내부 — 열린 윗면: 4벽 + 바닥 (컷아웃 구멍으로 실제 내부가 보인다) */}
       <mesh position={[x, topY - bowlDepth / 2, zC - d / 2 + wallT / 2]}>
         <boxGeometry args={[w, bowlDepth, wallT]} />
-        <meshStandardMaterial {...SINK_STEEL_DARK} />
+        <meshStandardMaterial {...INNER} />
       </mesh>
       <mesh position={[x, topY - bowlDepth / 2, zC + d / 2 - wallT / 2]}>
         <boxGeometry args={[w, bowlDepth, wallT]} />
-        <meshStandardMaterial {...SINK_STEEL_DARK} />
+        <meshStandardMaterial {...INNER} />
       </mesh>
       <mesh position={[x - w / 2 + wallT / 2, topY - bowlDepth / 2, zC]}>
         <boxGeometry args={[wallT, bowlDepth, d]} />
-        <meshStandardMaterial {...SINK_STEEL_DARK} />
+        <meshStandardMaterial {...INNER} />
       </mesh>
       <mesh position={[x + w / 2 - wallT / 2, topY - bowlDepth / 2, zC]}>
         <boxGeometry args={[wallT, bowlDepth, d]} />
-        <meshStandardMaterial {...SINK_STEEL_DARK} />
+        <meshStandardMaterial {...INNER} />
       </mesh>
       {/* 더블볼 분리대 */}
       {isDouble && (
         <mesh position={[x, topY - bowlDepth / 2, zC]}>
           <boxGeometry args={[wallT * 1.6, bowlDepth, d - wallT * 2]} />
-          <meshStandardMaterial {...SINK_STEEL_DARK} />
+          <meshStandardMaterial {...INNER} />
         </mesh>
       )}
       {/* 바닥(배수 방향으로 살짝 어둡게) + 배수구 */}
       <mesh position={[x, bowlBottomY + 0.005, zC]}>
         <boxGeometry args={[w - wallT, 0.01, d - wallT]} />
-        <meshStandardMaterial color="#7c858d" metalness={0.72} roughness={0.42} />
+        <meshStandardMaterial color={steelTop ? "#8b959d" : "#79838b"} metalness={0.78} roughness={0.4} />
       </mesh>
       {drainXs.map((dx, i) => (
         <mesh key={`drain-${i}`} position={[dx, bowlBottomY + 0.012, zC + d * 0.12]} rotation={[-Math.PI / 2, 0, 0]}>

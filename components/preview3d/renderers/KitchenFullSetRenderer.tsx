@@ -1382,6 +1382,7 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
         <SinkFixture
           x={sinkX}
           counterTopY={counterTopY}
+          countertopId={countertop.id}
           sinkOptionId={input.sink_option}
           cabinetWidthM={baseModules[sinkModuleIndex] / 1000}
           selected={selectedSink}
