@@ -24,7 +24,7 @@ import { PreviewErrorBoundary } from "@/components/preview3d/PreviewErrorBoundar
 import { PreviewUnsupported } from "@/components/preview3d/PreviewUnsupported";
 import { getPreviewRenderer } from "@/components/preview3d/renderers/rendererRegistry";
 import { KITCHEN_STANDARDS, snapKitchenModuleWidthMm } from "@/lib/platformConfig";
-import { KITCHEN_DIMENSION_LIMITS, clampModuleIndex, cooktopOptions, faucetOptions, hoodOptions, sinkOptions, snapKitchenDimensionMm } from "@/lib/kitchen";
+import { KITCHEN_DIMENSION_LIMITS, clampModuleIndex, cooktopOptions, faucetOptions, getSinkMinCabinetWidthMm, hoodOptions, sinkOptions, snapKitchenDimensionMm } from "@/lib/kitchen";
 import { productRules } from "@/lib/rules";
 import type { DoorStyle, DoorSwing, KitchenFixtureTarget, KitchenModulePart, KitchenMovableKey, PreviewEditTarget, PreviewFeedback, PreviewViewMode } from "@/components/preview3d/types";
 import type { VerdictLevel } from "@/lib/interior/types";
@@ -312,7 +312,7 @@ export function Preview3D({
         requiredWidth = Math.max(requiredWidth, 600);
       }
       if (input.sink_option && input.sink_option !== "none" && (input.sink_module_index ?? 0) === moduleIndex) {
-        requiredWidth = Math.max(requiredWidth, input.sink_option.includes("780") ? 800 : 900);
+        requiredWidth = Math.max(requiredWidth, getSinkMinCabinetWidthMm(input.sink_option));
       }
     } else {
       if (input.hood_option && input.hood_option !== "none" && (input.hood_module_index ?? input.cooktop_module_index ?? 0) === moduleIndex) {

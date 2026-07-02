@@ -11,7 +11,7 @@ import type { RoomAction, RoomStateSummary } from "@/lib/roomCommands";
 import { archiveDraft, readDraft, writeDraft } from "@/lib/quoteHistory";
 import { defaultInput, getProduct, materials } from "@/lib/data";
 import { formatMoney } from "@/lib/format";
-import { clampModuleIndex, cooktopOptions, countertopOptions, deriveModuleTypeCounts, faucetOptions, getHoodSpec, getKitchenSetDimensions, getKitchenTemplate, hoodOptions, kitchenTemplates, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, toeKickOptions } from "@/lib/kitchen";
+import { clampModuleIndex, cooktopOptions, countertopOptions, deriveModuleTypeCounts, faucetOptions, getHoodSpec, getKitchenSetDimensions, getKitchenTemplate, getSinkMinCabinetWidthMm, hoodOptions, KITCHEN_DIMENSION_LIMITS, kitchenTemplates, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, snapKitchenDimensionMm, toeKickOptions } from "@/lib/kitchen";
 import { MAX_WARDROBE_MODULE_COUNT, MAX_WARDROBE_MODULE_WIDTH_MM, MIN_WARDROBE_MODULE_COUNT, MIN_WARDROBE_MODULE_WIDTH_MM, alignWardrobeCounts, getDefaultWardrobeModules, normalizeWardrobeModules, wardrobeModuleTypeLabels, type WardrobeModuleType } from "@/lib/wardrobe";
 import { calculateQuote } from "@/lib/quote";
 import { countOptionCases, getDoorCountOptions, getSafeDoorCount, productRules } from "@/lib/rules";
@@ -549,20 +549,83 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     if (inp.depth_mm < r.minDepth || inp.depth_mm > r.maxDepth) out.push({ label: "깊이", val: inp.depth_mm, min: r.minDepth, max: r.maxDepth });
     return out;
   })();
+  /** 주방 칸 배열을 목표 폭까지 줄인다 — 여유(현재폭−최소규격)가 가장 큰 칸부터 10mm씩.
+   *  설비 규격 최소(싱크 800/900·쿡탑 600·후드 스펙+40·전자레인지 600)는 절대 침범하지 않는다. */
+  function fitKitchenModulesToWidth(inp: FurnitureInput, targetMm: number) {
+    const main = [...(inp.kitchen_modules_mm ?? [])];
+    const wall = [...(inp.kitchen_wall_modules_mm ?? inp.kitchen_modules_mm ?? [])];
+    const minOf = (layer: "base" | "wall") =>
+      (arr: number[]) =>
+        arr.map((_, i) => {
+          let min: number = KITCHEN_STANDARDS.moduleWidthMinMm;
+          if (layer === "base") {
+            if (inp.sink_option && inp.sink_option !== "none" && (inp.sink_module_index ?? 0) === i) min = Math.max(min, getSinkMinCabinetWidthMm(inp.sink_option));
+            if (inp.cooktop_option && inp.cooktop_option !== "none" && (inp.cooktop_module_index ?? 0) === i) min = Math.max(min, 600);
+            if (inp.microwave_option && inp.microwave_option !== "none" && (inp.microwave_module_index ?? 0) === i) min = Math.max(min, 600);
+          } else {
+            if (inp.hood_option && inp.hood_option !== "none" && (inp.hood_module_index ?? inp.cooktop_module_index ?? 0) === i) min = Math.max(min, Math.max(600, Math.ceil((getHoodSpec(inp.hood_option).widthMm + 40) / 10) * 10));
+            if (inp.microwave_option && inp.microwave_option !== "none" && (inp.microwave_module_index ?? 0) === i) min = Math.max(min, 600);
+          }
+          return min;
+        });
+    const shrink = (arr: number[], mins: number[]) => {
+      let total = arr.reduce((sum, v) => sum + v, 0);
+      let guard = 0;
+      while (total > targetMm && guard++ < 1000) {
+        let best = -1;
+        let bestSlack = 0;
+        for (let i = 0; i < arr.length; i += 1) {
+          const slack = arr[i] - mins[i];
+          if (slack > bestSlack) {
+            bestSlack = slack;
+            best = i;
+          }
+        }
+        if (best < 0) break; // 모든 칸이 최소 규격 — 더 줄일 수 없음(설비 규격 우선)
+        const step = Math.min(10, bestSlack, total - targetMm);
+        arr[best] -= step;
+        total -= step;
+      }
+      return arr;
+    };
+    return { main: shrink(main, minOf("base")(main)), wall: shrink(wall, minOf("wall")(wall)) };
+  }
+
   function snapSelectedToValid() {
     if (!selectedRoomItem) return;
     const r = productRules[selectedRoomItem.input.productType];
     if (!r) return;
     const inp = selectedRoomItem.input;
+    // 설치 벽 길이를 입력했다면 그보다 넓어질 수 없다(KITCHEN_WIDTH_OVER_WALL도 이 버튼으로 해결)
+    const wallCap = inp.total_wall_length_mm && inp.total_wall_length_mm > 0 ? inp.total_wall_length_mm : Infinity;
+    const nextWidth = Math.min(Math.min(r.maxWidth, wallCap), Math.max(r.minWidth, inp.width_mm));
     const nextHeight = Math.min(r.maxHeight, Math.max(r.minHeight, inp.height_mm));
     const nextDepth = Math.min(r.maxDepth, Math.max(r.minDepth, inp.depth_mm));
+    if (inp.productType === "kitchen_full_set") {
+      // 세트 폭은 width_mm이 아니라 칸 배열이 원본 — 칸을 줄여서 목표 폭에 맞춘다(설비 최소규격 유지).
+      // 높이/깊이도 kitchen_base_*가 원본이라 함께 보정해야 normalizeInput에 안 덮인다.
+      const fitted = inp.width_mm > nextWidth ? fitKitchenModulesToWidth(inp, nextWidth) : null;
+      const wallHeight = snapKitchenDimensionMm(inp.kitchen_wall_height_mm ?? KITCHEN_STANDARDS.wallHeightMm, KITCHEN_DIMENSION_LIMITS.wallHeight.min, KITCHEN_DIMENSION_LIMITS.wallHeight.max, KITCHEN_DIMENSION_LIMITS.wallHeight.step);
+      const wallDepth = snapKitchenDimensionMm(inp.kitchen_wall_depth_mm ?? KITCHEN_STANDARDS.wallDepthMm, KITCHEN_DIMENSION_LIMITS.wallDepth.min, KITCHEN_DIMENSION_LIMITS.wallDepth.max, KITCHEN_DIMENSION_LIMITS.wallDepth.step);
+      commitRoomItem({
+        ...inp,
+        width_mm: nextWidth,
+        height_mm: nextHeight,
+        depth_mm: nextDepth,
+        kitchen_base_height_mm: nextHeight,
+        kitchen_base_depth_mm: nextDepth,
+        kitchen_wall_height_mm: wallHeight,
+        kitchen_wall_depth_mm: wallDepth,
+        ...(fitted ? { kitchen_modules_mm: fitted.main, kitchen_base_modules_mm: fitted.main, kitchen_wall_modules_mm: fitted.wall } : {}),
+      });
+      return;
+    }
+    // 붙박이장은 normalizeWardrobeModules가 width_mm 목표로 모듈을 비례 재분배 — width_mm 클램프만으로 충분
     commitRoomItem({
       ...inp,
-      width_mm: Math.min(r.maxWidth, Math.max(r.minWidth, inp.width_mm)),
+      width_mm: nextWidth,
       height_mm: nextHeight,
       depth_mm: nextDepth,
-      // 주방 세트는 kitchen_base_* 가 원본(normalizeInput이 height/depth를 여기서 재계산) — 함께 맞춰야 실제 반영된다
-      ...(inp.productType === "kitchen_full_set" ? { kitchen_base_height_mm: nextHeight, kitchen_base_depth_mm: nextDepth } : {}),
     });
   }
   // 이슈 코드별 원클릭 해결 — 패널 알림에서 버튼 하나로 바로 고친다 (검증 룰과 짝: lib/order-validation/validators)
@@ -1786,7 +1849,7 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
     const hoodIdx = clampModuleIndex(input.hood_module_index ?? input.cooktop_module_index ?? defaultCooktopIndex, maxModuleIndex);
     const microIdx = clampModuleIndex(input.microwave_module_index ?? maxModuleIndex, maxModuleIndex);
     if (input.sink_option && input.sink_option !== "none") {
-      const minW = input.sink_option.includes("780") ? 800 : 900;
+      const minW = getSinkMinCabinetWidthMm(input.sink_option); // 검증 룰과 동일 기준(더블 950 등)
       bump(fixedModules, sinkIdx, minW);
       bump(fixedBase, sinkIdx, minW);
     }
@@ -1799,6 +1862,9 @@ function normalizeInput(input: FurnitureInput): FurnitureInput {
       bump(fixedWall, hoodIdx, minW);
     }
     if (input.microwave_option && input.microwave_option !== "none") {
+      // 검증 룰은 하부(base) 폭을 본다 — 하부·상부 모두 600 확보
+      bump(fixedModules, microIdx, 600);
+      bump(fixedBase, microIdx, 600);
       bump(fixedWall, microIdx, 600);
     }
   }

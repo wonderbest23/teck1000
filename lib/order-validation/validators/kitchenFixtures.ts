@@ -5,6 +5,7 @@ import {
   getKitchenSetDimensions,
   getKitchenTemplate,
   getMicrowaveOption,
+  getSinkMinCabinetWidthMm,
   getSinkOption,
   normalizeKitchenLayerWidths,
   normalizeKitchenModules,
@@ -31,7 +32,7 @@ export function validateKitchenFixtures(input: FurnitureInput, issues: OrderIssu
   const sink = getSinkOption(input.sink_option);
   if (sink.id !== "none") {
     const i = clampModuleIndex(input.sink_module_index ?? template.sinkModuleIndex, maxIndex);
-    const need = sink.id.includes("double") ? 950 : sink.id.includes("860") ? 900 : 800;
+    const need = getSinkMinCabinetWidthMm(sink.id);
     if (baseModules[i] < need) {
       issues.push({
         code: "SINK_WIDER_THAN_MODULE",

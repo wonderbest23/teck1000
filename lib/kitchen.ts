@@ -238,6 +238,14 @@ export function getSinkOption(optionId?: string) {
   return getOptionById(sinkOptions, optionId);
 }
 
+/** 싱크볼이 들어가는 칸의 최소 폭(mm) — 검증(validateKitchenFixtures)·자동 확장·권장값 스냅이 모두 이 값을 쓴다(단일 진실). */
+export function getSinkMinCabinetWidthMm(sinkOptionId?: string): number {
+  if (!sinkOptionId || sinkOptionId === "none") return 0;
+  if (sinkOptionId.includes("double")) return 950;
+  if (sinkOptionId.includes("860")) return 900;
+  return 800;
+}
+
 export function getFaucetOption(optionId?: string) {
   return getOptionById(faucetOptions, optionId);
 }
