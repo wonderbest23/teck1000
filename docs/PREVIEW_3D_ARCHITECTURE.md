@@ -181,6 +181,10 @@ renderers/
 
 > 밝기 조절 포인트: `ambientLight.intensity`, `hemisphereLight` 3번째 인자, `toneMappingExposure`.
 
+**환경맵(StudioEnvironment, primitives)**: three 내장 `RoomEnvironment`를 PMREM으로 구워 `scene.environment`에 세팅(네트워크 불필요). `scene.environmentIntensity=0.45`로 확산광 밸런스는 유지하고 하이그로시 도어의 **반사(스페큘러)만** 얹는다 — "회색 덩어리" 해소. 소재별 envMapIntensity: gloss 1.5 / matte 0.35 / wood 0.45 / carcass 0.3.
+
+**몸통·문짝 재질 분리**: 실제 싱크대처럼 몸통(측판·상하판·뒷판·선반)은 선택 소재와 무관하게 **백색 멜라민 합판**(`CARCASS_FINISH` + `Panel carcass` prop, 무광 roughness 0.74)으로, 문짝·서랍 앞판만 선택 소재(UV하이그로시/무광/우드)로 렌더. 적용: primitives `SimpleCabinet`(하부장 몸통), KitchenModules 상부장 몸통.
+
 ---
 
 ## 7. 카메라 & 프레임

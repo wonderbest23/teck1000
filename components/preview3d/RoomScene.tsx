@@ -5,7 +5,7 @@ import { ContactShadows, Html, OrbitControls, PerspectiveCamera } from "@react-t
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import * as THREE from "three";
-import { FinishProvider, PreviewRoom } from "@/components/preview3d/primitives";
+import { FinishProvider, PreviewRoom, StudioEnvironment } from "@/components/preview3d/primitives";
 import { getMaterialPreset, materialPresets } from "@/components/preview3d/materials";
 import { getPreviewRenderer } from "@/components/preview3d/renderers/rendererRegistry";
 import { CameraRig } from "@/components/preview3d/camera/CameraRig";
@@ -671,6 +671,8 @@ export function RoomScene({
         <ambientLight intensity={1.0} />
         <hemisphereLight args={["#ffffff", "#f1f5f9", 0.55]} />
         <directionalLight position={[0, 6, 0.5]} intensity={0.3} />
+        {/* 하이그로시 도어 반사용 환경맵 — 확산광 밸런스는 유지(intensity 낮음) */}
+        <StudioEnvironment />
         <PerspectiveCamera makeDefault fov={38} position={[2.5, 2, 3]} />
         <CameraRig frame={frame} freeView />
         <PreviewRoom extents={floor} floorY={0} topY={floor.topY} ceilingY={ceilingY} />

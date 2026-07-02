@@ -863,12 +863,13 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const showSwingChips = activeInput.has_door && (activeInput.productType === "custom_shelf" || activeInput.productType === "gap_cabinet" || activeInput.productType === "shoe_cabinet");
 
   // 간편(소비자) 모드에서는 설비(주방 모델 선택) 같은 전문 카테고리를 숨긴다.
-  // 소재는 미리보기 우측 패널(가구 선택 시)로 이동 — 상단 카테고리에서 제거해 버튼 수를 줄인다.
-  const categories = getEditorCategories(activeInput.productType, isPro).filter((c) => (isPro || c.id !== "fixtures") && c.id !== "material");
+  // 소재는 미리보기 우측 패널로, 검수·주문은 하단 CTA(주문 버튼)로 이동 — 상단 카테고리 버튼 수를 줄인다.
+  const categories = getEditorCategories(activeInput.productType, isPro).filter((c) => (isPro || c.id !== "fixtures") && c.id !== "material" && c.id !== "check");
   // effectiveCat: 데스크톱 2분할 패널이 항상 표시할 칸(미선택 시 첫 칸). 모바일 팝업은 activeCat != null일 때만 뜬다.
   const effectiveCat = activeCat ?? categories[0]?.id ?? null;
-  const activeLabel = categories.find((cat) => cat.id === activeCat)?.label ?? "";
-  const effectiveLabel = categories.find((cat) => cat.id === effectiveCat)?.label ?? "";
+  // 검수·주문은 카테고리 버튼에서 뺐지만(하단 CTA로 진입) 팝업 제목은 필요 — 폴백 라벨
+  const activeLabel = categories.find((cat) => cat.id === activeCat)?.label ?? (activeCat === "check" ? "검수·주문" : "");
+  const effectiveLabel = categories.find((cat) => cat.id === effectiveCat)?.label ?? (effectiveCat === "check" ? "검수·주문" : "");
 
   // '＋ 가구 추가' 시트 내용 — 데스크톱(캔버스 위 반투명 플로팅)과 모바일(섹션 아래)이 공유
   const addSheetBody = (
@@ -1381,6 +1382,26 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                       onChecklistChange={(id, checked) => setChecklistState((current) => ({ ...current, [id]: checked }))}
                       onInputChange={(partial) => setInput((current) => normalizeInput({ ...current, ...partial }))}
                     />
+                    {/* 잘 모르겠으면 그냥 접수 — 담당자가 검수 후 확정 전에 연락(소비자를 체크리스트로 막지 않는다) */}
+                    <div className="border-t border-slate-100 pt-3">
+                      <p className="mb-2 text-[11px] font-bold leading-5 text-slate-500">
+                        항목이 어렵거나 잘 모르겠다면 <b className="text-slate-700">이대로 접수</b>하세요. 담당자가 치수·설치 조건을 검수한 뒤 <b className="text-slate-700">제작 확정 전에 연락</b>드립니다.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          addConfiguredItem(input.productType, isManual && manualTitle ? manualTitle : product.name, input, 1, {
+                            order_verdict: validation.verdict,
+                            checklist_confirmations: requiredChecklistIds.filter((id) => checklistState[id]),
+                          });
+                          setActiveCat(null);
+                          router.push("/cart");
+                        }}
+                        className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+                      >
+                        잘 모르겠어요 — 그냥 주문할게요 (검수 요청 접수)
+                      </button>
+                    </div>
                   </div>
                 )}
         </>
@@ -1420,19 +1441,23 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                 </span>
                 <span className="max-sm:hidden">{added ? "담김 ✓" : "장바구니 담기"}</span>
               </button>
+              {/* 홀드(비활성) 대신 항상 진행 가능 — 조건 미충족이면 검수·주문 팝업을 열어 하나씩 해결 */}
               <button
                 type="button"
-                disabled={!canPlaceOrder}
                 onClick={() => {
+                  if (!canPlaceOrder) {
+                    setActiveCat("check");
+                    return;
+                  }
                   addConfiguredItem(input.productType, isManual && manualTitle ? manualTitle : product.name, input, 1, {
                     order_verdict: validation.verdict,
                     checklist_confirmations: requiredChecklistIds.filter((id) => checklistState[id]),
                   });
                   router.push("/cart");
                 }}
-                className="whitespace-nowrap rounded-2xl bg-brand px-3.5 py-2.5 text-[13px] font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300 sm:px-5 sm:py-3 sm:text-sm"
+                className="whitespace-nowrap rounded-2xl bg-brand px-3.5 py-2.5 text-[13px] font-black text-white sm:px-5 sm:py-3 sm:text-sm"
               >
-                {ORDER_VERDICT_CTA[validation.verdict]}
+                {canPlaceOrder ? ORDER_VERDICT_CTA[validation.verdict] : "주문 진행하기"}
               </button>
             </div>
           </div>

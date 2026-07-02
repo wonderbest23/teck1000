@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
-import { FinishProvider } from "@/components/preview3d/primitives";
+import { FinishProvider, StudioEnvironment } from "@/components/preview3d/primitives";
 import { CameraRig } from "@/components/preview3d/camera/CameraRig";
 import { getSceneFrame, getKitchenModuleFocusFrame } from "@/components/preview3d/camera/sceneFrame";
 import { KitchenSelectionPanel, PreviewOverlayControls } from "@/components/preview3d/controls/PreviewOverlayControls";
@@ -790,6 +790,8 @@ export function Preview3D({
             <ambientLight intensity={1.0} />
             <hemisphereLight args={["#ffffff", "#f1f5f9", 0.55]} />
             <directionalLight position={[0, 6, 0.5]} intensity={0.3} />
+            {/* 하이그로시 도어 반사용 환경맵 — 확산광 밸런스는 유지(intensity 낮음) */}
+            <StudioEnvironment />
             <PerspectiveCamera makeDefault fov={isKitchenProduct ? 34 : 38} position={[1.8, 1.3, 2.1]} />
             <CameraRig frame={activeFrame} freeView={freeView || !isKitchenProduct} />
             <FinishProvider material={selectedMaterial}>
