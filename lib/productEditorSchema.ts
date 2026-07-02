@@ -26,7 +26,7 @@ export const productEditorCategories: Record<ProductType, EditorCategory[]> = {
   custom_shelf: [MATERIAL, SPEC, DOORS, CHECK],
   gap_cabinet: [MATERIAL, SPEC, DOORS, CHECK],
   shoe_cabinet: [MATERIAL, SPEC, DOORS, CHECK],
-  kitchen_wall_cabinet: [MATERIAL, SPEC, DOORS, CHECK],
+  kitchen_wall_cabinet: [MATERIAL, SPEC, FIXTURES, DOORS, CHECK], // FIXTURES = 단품 추가 옵션(EP·후드타공·부속)
   kitchen_base_cabinet: [MATERIAL, SPEC, FIXTURES, DOORS, CHECK],
   kitchen_island: [MATERIAL, SPEC, FIXTURES, DOORS, CHECK],
   // 칸 편집은 3D에서 캐비닛 클릭 → Kitchen3DEditDock으로 통일(우측 중복 제거)

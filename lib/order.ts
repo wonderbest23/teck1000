@@ -3,6 +3,7 @@ import { ENTRANCE_STANDARDS, KITCHEN_STANDARDS, WARDROBE_STANDARDS } from "@/lib
 import { defaultInput, getProduct } from "@/lib/data";
 import { clampModuleIndex, deriveModuleTypeCounts, getKitchenSetDimensions, getKitchenTemplate, normalizeKitchenLayerWidths, normalizeKitchenModules } from "@/lib/kitchen";
 import { calculateQuote } from "@/lib/quote";
+import { getInstallTier, getRemovalPrice, installFloorSurcharge, installRegionSurcharge } from "@/lib/retailCatalog";
 import { getSafeDoorCount, productRules } from "@/lib/rules";
 import type {
   CompositeOrderDraft,
@@ -226,6 +227,9 @@ export function calculateCompositeQuote(draft: CompositeOrderDraft): CompositeQu
   const boardCutPlan = generateBoardCutPlan(allParts);
   const warnings = [...itemQuotes.flatMap((line) => line.quote.warnings), ...validateSchedule(draft.schedule), ...validateCustomer(draft.customer)];
 
+  const services = calculateOrderServices(itemQuotes, draft.services);
+  const itemsTotal = itemQuotes.reduce((sum, line) => sum + line.lineTotal, 0);
+
   return {
     itemQuotes,
     warnings,
@@ -236,9 +240,58 @@ export function calculateCompositeQuote(draft: CompositeOrderDraft): CompositeQu
     totalHardwareCost: sumLine(itemQuotes, "hardwareCost"),
     totalPackingCost: sumLine(itemQuotes, "packingCost"),
     totalDeliveryCost: Math.max(...itemQuotes.map((line) => line.quote.deliveryCost), 0),
-    totalPrice: itemQuotes.reduce((sum, line) => sum + line.lineTotal, 0),
+    installCost: services.installCost,
+    removalCost: services.removalCost,
+    floorSurcharge: services.floorSurcharge,
+    regionSurcharge: services.regionSurcharge,
+    serviceCost: services.serviceCost,
+    totalPrice: itemsTotal + services.serviceCost,
     boardCutPlan,
   };
+}
+
+/**
+ * 주문 단위 방문시공·철거·지역/층별 추가비 계산 (retailCatalog 요금표 기준).
+ * 총 구매 사이즈 = 모든 품목 폭 × 수량 합. 시공비는 총 사이즈 구간으로 tier를 잡고
+ * 개수대/조리대(하부) 포함 시 sinkPrice, 상부장 포함 시 wallPrice를 각각 부과한다.
+ */
+function calculateOrderServices(
+  itemQuotes: CompositeQuoteResult["itemQuotes"],
+  services?: CompositeOrderDraft["services"],
+): { installCost: number; removalCost: number; floorSurcharge: number; regionSurcharge: number; serviceCost: number } {
+  const empty = { installCost: 0, removalCost: 0, floorSurcharge: 0, regionSurcharge: 0, serviceCost: 0 };
+  if (!services) return empty;
+
+  const baseTypes: ProductType[] = ["kitchen_base_cabinet", "kitchen_full_set", "kitchen_island"];
+  const wallTypes: ProductType[] = ["kitchen_wall_cabinet", "kitchen_full_set"];
+  let totalWidthMm = 0;
+  let hasBase = false;
+  let hasWall = false;
+  for (const line of itemQuotes) {
+    const width = Math.max(0, line.item.input.width_mm || 0) * line.item.quantity;
+    totalWidthMm += width;
+    if (baseTypes.includes(line.item.input.productType)) hasBase = true;
+    if (wallTypes.includes(line.item.input.productType)) hasWall = true;
+  }
+
+  let installCost = 0;
+  let floorSurcharge = 0;
+  if (services.install) {
+    const tier = getInstallTier(totalWidthMm);
+    if (tier) {
+      installCost = (hasBase ? tier.sinkPrice : 0) + (hasWall ? tier.wallPrice : 0);
+    }
+    const floor = services.no_elevator_floor ?? 0;
+    if (floor >= installFloorSurcharge.appliesFromFloor) {
+      floorSurcharge =
+        installFloorSurcharge.baseSurcharge +
+        (floor - installFloorSurcharge.appliesFromFloor) * installFloorSurcharge.perFloorSurcharge;
+    }
+  }
+  const regionSurcharge = services.install && services.region_surcharge ? installRegionSurcharge.price : 0;
+  const removalCost = services.removal ? getRemovalPrice(totalWidthMm) ?? 0 : 0;
+  const serviceCost = installCost + floorSurcharge + regionSurcharge + removalCost;
+  return { installCost, removalCost, floorSurcharge, regionSurcharge, serviceCost };
 }
 
 export function buildOrderRequestSummary(draft: CompositeOrderDraft) {

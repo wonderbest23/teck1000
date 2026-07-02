@@ -93,6 +93,12 @@ export type FurnitureInput = {
   microwave_module_index?: number;
   /** none | standard_100 */
   toe_kick_option?: string;
+  /** EP 마감판넬 적용 면 수 (0=없음, 1=한쪽, 2=양쪽) — 상부장/후드장 40,000·하부장/가스대 65,000원/면 */
+  ep_panel_sides?: number;
+  /** 후드장 타공 여부 (+40,000원) */
+  hood_drilling?: boolean;
+  /** 추가 부속/악세사리 (retailCatalog.accessories 의 name 목록) */
+  accessory_ids?: string[];
   /** 거실 인테리어장 하부 도어 구역 비율(0.3~0.6). 나머지 상부는 오픈 진열. 기본 0.45 */
   living_door_ratio?: number;
   /** flat | frame | slat */
@@ -211,6 +217,12 @@ export type QuoteResult = {
   hardwareCost: number;
   packingCost: number;
   deliveryCost: number;
+  /** EP 마감판넬 비용 (면 수 × 단가) */
+  epPanelCost: number;
+  /** 후드장 타공 비용 */
+  hoodDrillingCost: number;
+  /** 추가 부속/악세사리 합계 */
+  accessoryCost: number;
   marginRate: number;
   margin: number;
   totalCost: number;
@@ -248,10 +260,23 @@ export type CustomerInfo = {
   memo: string;
 };
 
+/** 주문 단위 추가 서비스 (방문시공·철거 — 총 구매 사이즈 기준) */
+export type OrderServices = {
+  /** 방문 시공 신청 (수도권: 서울·경기·인천) */
+  install: boolean;
+  /** 기존 제품 철거 */
+  removal: boolean;
+  /** 방문시공 추가비 지역 (+30,000원) */
+  region_surcharge: boolean;
+  /** 엘리베이터 없는 설치 층수 (3층 이상부터 층별 추가) */
+  no_elevator_floor?: number;
+};
+
 export type CompositeOrderDraft = {
   items: OrderItemInput[];
   schedule: RequestedSchedule;
   customer: CustomerInfo;
+  services?: OrderServices;
 };
 
 export type CompositeQuoteResult = {
@@ -264,6 +289,16 @@ export type CompositeQuoteResult = {
   totalHardwareCost: number;
   totalPackingCost: number;
   totalDeliveryCost: number;
+  /** 방문시공비 (총 구매 사이즈 기준) */
+  installCost: number;
+  /** 기존 제품 철거비 */
+  removalCost: number;
+  /** 무엘베 층별 추가비 */
+  floorSurcharge: number;
+  /** 지역 추가비 */
+  regionSurcharge: number;
+  /** 주문 단위 서비스 합계 (시공+철거+층별+지역) */
+  serviceCost: number;
   totalPrice: number;
   boardCutPlan: BoardCutPlan;
 };

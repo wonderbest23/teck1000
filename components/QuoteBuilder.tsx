@@ -11,6 +11,7 @@ import type { RoomAction, RoomStateSummary } from "@/lib/roomCommands";
 import { archiveDraft, readDraft, writeDraft } from "@/lib/quoteHistory";
 import { defaultInput, getProduct, materials } from "@/lib/data";
 import { formatMoney } from "@/lib/format";
+import { accessories as retailAccessories } from "@/lib/retailCatalog";
 import { clampModuleIndex, cooktopOptions, countertopOptions, DEFAULT_KITCHEN_MODULE_WIDTH_MM, deriveModuleTypeCounts, faucetOptions, getHoodSpec, getKitchenSetDimensions, getKitchenTemplate, getSinkMinCabinetWidthMm, hoodOptions, KITCHEN_DIMENSION_LIMITS, kitchenTemplates, MAX_KITCHEN_MODULE_COUNT, microwaveOptions, normalizeKitchenLayerWidths, normalizeKitchenModules, sinkOptions, snapKitchenDimensionMm, toeKickOptions, type KitchenModuleType } from "@/lib/kitchen";
 import { MAX_WARDROBE_MODULE_COUNT, MAX_WARDROBE_MODULE_WIDTH_MM, MIN_WARDROBE_MODULE_COUNT, MIN_WARDROBE_MODULE_WIDTH_MM, alignWardrobeCounts, getDefaultWardrobeModules, normalizeWardrobeModules, wardrobeModuleTypeLabels, type WardrobeModuleType } from "@/lib/wardrobe";
 import { calculateQuote } from "@/lib/quote";
@@ -1144,8 +1145,11 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const showSwingChips = activeInput.has_door && (activeInput.productType === "custom_shelf" || activeInput.productType === "gap_cabinet" || activeInput.productType === "shoe_cabinet" || activeInput.productType === "living_cabinet");
 
   // 간편(소비자) 모드에서는 설비(주방 모델 선택) 같은 전문 카테고리를 숨긴다.
+  // 단, 상부장 단품의 fixtures는 소비자용 추가 옵션(EP 판넬·후드 타공·부속)이라 간편 모드에서도 노출.
   // 소재는 미리보기 우측 패널로, 검수·주문은 하단 CTA(주문 버튼)로 이동 — 상단 카테고리 버튼 수를 줄인다.
-  const categories = getEditorCategories(activeInput.productType, isPro).filter((c) => (isPro || c.id !== "fixtures") && c.id !== "material" && c.id !== "check");
+  const categories = getEditorCategories(activeInput.productType, isPro).filter(
+    (c) => (isPro || c.id !== "fixtures" || activeInput.productType === "kitchen_wall_cabinet") && c.id !== "material" && c.id !== "check",
+  );
   // effectiveCat: 데스크톱 2분할 패널이 항상 표시할 칸(미선택 시 첫 칸). 모바일 팝업은 activeCat != null일 때만 뜬다.
   const effectiveCat = activeCat ?? categories[0]?.id ?? null;
   // 검수·주문은 카테고리 버튼에서 뺐지만(하단 CTA로 진입) 팝업 제목은 필요 — 폴백 라벨
@@ -1358,7 +1362,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
         <button type="button" onClick={() => { setAddOpen(false); setPickerSlug(null); }} aria-label="닫기" className="grid h-6 w-6 place-items-center rounded-md bg-soft text-sm font-black leading-none text-slate-500 hover:bg-slate-100">×</button>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {catalogCategories.flatMap((cat) => cat.slugs).map((slug) => {
+        {/* 같은 상품이 여러 카테고리에 속할 수 있어(선반장=거실+수납) 중복 제거 — duplicate key 방지 */}
+        {[...new Set(catalogCategories.flatMap((cat) => cat.slugs))].map((slug) => {
           // 상하부장 세트도 바로 추가 대신 규격(프리셋) 선택을 거친다
           const presets = roomAddPresets[slug] ?? (slug === "kitchen_full_set" ? [] : undefined);
           const active = pickerSlug === slug;
@@ -1701,6 +1706,55 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                   </div>
                 )}
 
+                {effectiveCat === "fixtures" && activeInput.productType.startsWith("kitchen_") && (
+                  <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4">
+                    <div className="text-xs font-black text-slate-500">추가 옵션 (고객센터 상담 품목)</div>
+                    <SelectField
+                      label={`EP 마감판넬 (${activeInput.productType === "kitchen_wall_cabinet" ? "면당 40,000원" : "면당 65,000원"})`}
+                      value={String(activeInput.ep_panel_sides ?? 0)}
+                      onChange={(value) => updateActive("ep_panel_sides", Number(value))}
+                      options={[
+                        { value: "0", label: "적용 안 함" },
+                        { value: "1", label: "한쪽 면" },
+                        { value: "2", label: "양쪽 면" },
+                      ]}
+                    />
+                    {(activeInput.productType === "kitchen_full_set" || activeInput.productType === "kitchen_wall_cabinet") && (
+                      <SelectField
+                        label="후드장 타공 (+40,000원)"
+                        value={String(Boolean(activeInput.hood_drilling))}
+                        onChange={(value) => updateActive("hood_drilling", value === "true")}
+                        options={[
+                          { value: "false", label: "타공 안 함" },
+                          { value: "true", label: "타공 (자바라·전선)" },
+                        ]}
+                      />
+                    )}
+                    <div>
+                      <div className="mb-2 text-xs font-black text-slate-500">부속 / 악세사리</div>
+                      <div className="flex flex-wrap gap-2">
+                        {retailAccessories.filter((a) => !a.soldOut).map((a) => {
+                          const selected = (activeInput.accessory_ids ?? []).includes(a.name);
+                          return (
+                            <button
+                              key={a.name}
+                              type="button"
+                              onClick={() => {
+                                const current = activeInput.accessory_ids ?? [];
+                                const next = selected ? current.filter((n) => n !== a.name) : [...current, a.name];
+                                updateActive("accessory_ids", next);
+                              }}
+                              className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${selected ? "bg-brand text-white" : "bg-soft text-slate-700"}`}
+                            >
+                              {a.name} +{formatMoney(a.price)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {effectiveCat === "doors" && (
                   activeInput.productType === "kitchen_full_set" ? (
                     <div className="space-y-4">
@@ -1914,7 +1968,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                       </div>
                       <p className="mt-2 text-[11px] font-bold text-slate-400">상세하게 만들려면 해당 상품 페이지로:
                         <span className="ml-1 inline-flex flex-wrap gap-1">
-                          {catalogCategories.flatMap((c) => c.slugs).filter((s) => s !== input.productType).slice(0, 4).map((slug) => (
+                          {[...new Set(catalogCategories.flatMap((c) => c.slugs))].filter((s) => s !== input.productType).slice(0, 4).map((slug) => (
                             <button key={slug} type="button" onClick={() => goToProduct(slug)} className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-600 hover:bg-slate-200">{productLabels[slug] ?? slug} ↗</button>
                           ))}
                         </span>

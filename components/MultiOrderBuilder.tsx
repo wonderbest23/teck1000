@@ -17,7 +17,7 @@ import {
   normalizeFurnitureInput,
 } from "@/lib/order";
 import { getDoorCountOptions, productRules } from "@/lib/rules";
-import type { CompositeOrderDraft, CustomerInfo, FurnitureInput, OrderItemInput, ProductType, RequestedSchedule } from "@/lib/types";
+import type { CompositeOrderDraft, CustomerInfo, FurnitureInput, OrderItemInput, OrderServices, ProductType, RequestedSchedule } from "@/lib/types";
 
 const steps = ["장바구니", "날짜 지정", "주문자 정보", "주문 요청"];
 
@@ -28,6 +28,7 @@ export function MultiOrderBuilder() {
   const [items, setItems] = useState<OrderItemInput[]>([createOrderItem("kitchen_full_set")]);
   const [schedule, setSchedule] = useState<RequestedSchedule>(() => createDefaultSchedule());
   const [customer, setCustomer] = useState<CustomerInfo>(() => createEmptyCustomer());
+  const [services, setServices] = useState<OrderServices>({ install: false, removal: false, region_surcharge: false, no_elevator_floor: 0 });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const loadedRef = useRef(false);
@@ -44,8 +45,8 @@ export function MultiOrderBuilder() {
     if (loadedRef.current) setCart(items);
   }, [items]);
 
-  const draft: CompositeOrderDraft = { items, schedule, customer };
-  const composite = useMemo(() => calculateCompositeQuote(draft), [items, schedule, customer]);
+  const draft: CompositeOrderDraft = { items, schedule, customer, services };
+  const composite = useMemo(() => calculateCompositeQuote(draft), [items, schedule, customer, services]);
   const hardErrors = composite.warnings.filter((warning) => warning.type === "error");
 
   function addItem() {
@@ -216,8 +217,38 @@ export function MultiOrderBuilder() {
             <Cost label="판재비" value={formatMoney(composite.totalBoardCost)} />
             <Cost label="엣지비" value={formatMoney(composite.totalEdgeCost)} />
             <Cost label="가공/부속" value={formatMoney(composite.totalProcessingCost + composite.totalHardwareCost)} />
+            {composite.installCost > 0 && <Cost label="방문 시공비" value={formatMoney(composite.installCost)} />}
+            {composite.floorSurcharge > 0 && <Cost label="무엘베 층별 추가" value={formatMoney(composite.floorSurcharge)} />}
+            {composite.regionSurcharge > 0 && <Cost label="지역 추가비" value={formatMoney(composite.regionSurcharge)} />}
+            {composite.removalCost > 0 && <Cost label="기존 제품 철거비" value={formatMoney(composite.removalCost)} />}
             <Cost label="원판 소요" value={`${composite.boardCutPlan.summaries.reduce((sum, summary) => sum + summary.sheet_count, 0)}장`} />
           </dl>
+
+          <div className="mt-5 rounded-2xl bg-soft p-4">
+            <div className="text-xs font-black text-slate-500">방문 시공 · 철거 (수도권: 서울·경기·인천)</div>
+            <div className="mt-3 space-y-2 text-sm">
+              <label className="flex items-center gap-2 font-semibold text-slate-700">
+                <input type="checkbox" className="accent-brand" checked={services.install} onChange={(e) => setServices((s) => ({ ...s, install: e.target.checked }))} />
+                방문 시공 신청
+              </label>
+              {services.install && (
+                <div className="ml-6 space-y-2">
+                  <label className="flex items-center gap-2 text-slate-600">
+                    <input type="checkbox" className="accent-brand" checked={services.region_surcharge} onChange={(e) => setServices((s) => ({ ...s, region_surcharge: e.target.checked }))} />
+                    추가비 지역(+30,000원)
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-600">
+                    엘베 없는 설치 층수
+                    <input type="number" min={0} max={20} className="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-center" value={services.no_elevator_floor ?? 0} onChange={(e) => setServices((s) => ({ ...s, no_elevator_floor: Number(e.target.value) }))} />
+                  </label>
+                </div>
+              )}
+              <label className="flex items-center gap-2 font-semibold text-slate-700">
+                <input type="checkbox" className="accent-brand" checked={services.removal} onChange={(e) => setServices((s) => ({ ...s, removal: e.target.checked }))} />
+                기존 제품 철거
+              </label>
+            </div>
+          </div>
           {composite.warnings.length > 0 && (
             <div className="mt-5 space-y-2">
               {composite.warnings.map((warning, index) => (

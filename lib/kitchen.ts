@@ -141,6 +141,34 @@ export const kitchenTemplates: KitchenTemplate[] = [
     cooktopModuleIndex: 0,
     description: "넓은 주방용 600 모듈 5개 구성",
   },
+  {
+    // 상세페이지 구성예시 ① : 1200 개수대 서랍형 + 600 가스대 (상부장 600+300+600후드장)
+    id: "kitchen_1800_sink_gas",
+    name: "구성예시① 1800 (개수대+가스대)",
+    width_mm: 1800,
+    base_height_mm: K.baseHeightMm,
+    base_depth_mm: K.baseDepthMm,
+    wall_height_mm: K.wallHeightMm,
+    wall_depth_mm: K.wallDepthMm,
+    modules: [1200, 600],
+    sinkModuleIndex: 0,
+    cooktopModuleIndex: 1,
+    description: "1200 개수대 서랍형 + 600 가스대 · 상부장 600/300/후드장",
+  },
+  {
+    // 상세페이지 구성예시 ② : 600조리대 + 1200 개수대 서랍형 + 300조리대 + 600조리대
+    id: "kitchen_2700_counter_sink",
+    name: "구성예시② 2700 (조리대+개수대)",
+    width_mm: 2700,
+    base_height_mm: K.baseHeightMm,
+    base_depth_mm: K.baseDepthMm,
+    wall_height_mm: K.wallHeightMm,
+    wall_depth_mm: K.wallDepthMm,
+    modules: [600, 1200, 300, 600],
+    sinkModuleIndex: 1,
+    cooktopModuleIndex: 3,
+    description: "600조리대 + 1200 개수대 서랍형 + 300조리대 + 600조리대",
+  },
 ];
 
 export const toeKickOptions = [

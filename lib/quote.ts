@@ -5,6 +5,7 @@ import { clampModuleIndex, deriveModuleTypeCounts, getCooktopOption, getCountert
 import { getBoardThicknessMm, getProductMarginRate, getQuoteConfig, PROCESS_QUOTE_STANDARDS } from "@/lib/platformConfig";
 import { validateFurnitureInput } from "@/lib/interior/validatePreview";
 import { getActiveProcessProfile } from "@/lib/processStandards";
+import { accessoryPriceByName, baseCabinetShippingFor, epUnitPrice, hoodDrillingOption, wallCabinetShippingFor } from "@/lib/retailCatalog";
 import { generateRuleWarnings, getSafeDoorCount } from "@/lib/rules";
 import { alignWardrobeCounts, getWardrobeDrawerCountLimits, normalizeWardrobeModules } from "@/lib/wardrobe";
 import type { EdgeTask, FurnitureInput, HardwareTask, Part, ProductType, QuoteResult, SiteTask, Warning } from "@/lib/types";
@@ -37,6 +38,28 @@ function doorSwingLabel(swing?: string) {
 
 function clampPositive(value: number) {
   return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * 소매 카탈로그 배송비 표(retailCatalog) 기반 택배비 추정.
+ * 주방 풀세트는 하부장·상부장 모듈별 배송비를 합산한다(제품별 개별 화물 포장 기준).
+ * 계산 불가(모듈 정보 없음)면 0을 반환하여 호출부에서 고정 배송비로 폴백한다.
+ */
+function estimateCatalogCourierCost(input: FurnitureInput): number {
+  if (input.productType === "kitchen_full_set") {
+    const baseModules = input.kitchen_base_modules_mm ?? input.kitchen_modules_mm ?? [];
+    const wallModules = input.kitchen_wall_modules_mm ?? [];
+    const baseCost = baseModules.reduce((sum, widthMm) => sum + baseCabinetShippingFor(widthMm), 0);
+    const wallCost = wallModules.reduce((sum, widthMm) => sum + wallCabinetShippingFor(widthMm), 0);
+    return baseCost + wallCost;
+  }
+  if (input.productType === "kitchen_base_cabinet" || input.productType === "kitchen_island") {
+    return baseCabinetShippingFor(input.width_mm);
+  }
+  if (input.productType === "kitchen_wall_cabinet") {
+    return wallCabinetShippingFor(input.width_mm);
+  }
+  return 0;
 }
 
 function getHardwarePrice(name: string) {
@@ -801,17 +824,28 @@ export function calculateQuote(input: FurnitureInput): QuoteResult {
     .filter((part) => part.name.includes("문짝") || part.name.includes("슬라이딩 도어"))
     .reduce((sum, part) => sum + part.quantity, 0);
   const doorStyleCost = doorLeafCount * (DOOR_STYLE_SURCHARGE_WON[normalizedInput.door_style ?? "flat"] ?? 0);
+  // 소매 옵션 비용 (retailCatalog): EP 마감판넬 · 후드장 타공 · 부속/악세사리
+  const epKind: "wall" | "hood" | "base" | "gas" =
+    normalizedInput.productType === "kitchen_wall_cabinet" ? "wall" : "base";
+  const epPanelCost = Math.max(0, Math.min(2, Math.floor(normalizedInput.ep_panel_sides ?? 0))) * epUnitPrice(epKind);
+  const hoodDrillingCost = normalizedInput.hood_drilling ? hoodDrillingOption.price : 0;
+  const accessoryCost = (normalizedInput.accessory_ids ?? []).reduce((sum, name) => sum + accessoryPriceByName(name), 0);
+  const retailOptionCost = epPanelCost + hoodDrillingCost + accessoryCost;
   const packingCost =
     quoteConfig.packingBasePrice + Math.max(0, partCount - quoteConfig.freePackingPartThreshold) * quoteConfig.packingPerExtraPart;
   // 배송 방식에 따라 배송비 반영 (직접수령 0, 화물 가산 — 유령 옵션 방지)
+  // 택배(기본)는 소매 카탈로그 사이즈별 배송비 표로 계산, 계산 불가 시 고정값 폴백
+  const catalogCourierCost = estimateCatalogCourierCost(normalizedInput);
   const deliveryCost =
     normalizedInput.delivery_type === "직접수령"
       ? 0
       : normalizedInput.delivery_type === "화물"
         ? Math.round(quoteConfig.deliveryPrice * 1.8)
-        : quoteConfig.deliveryPrice;
+        : catalogCourierCost > 0
+          ? catalogCourierCost
+          : quoteConfig.deliveryPrice;
   const marginRate = getProductMarginRate(normalizedInput.productType);
-  const totalCost = boardCost + edgeCost + processingCost + hardwareCost + kitchenOptionCost + doorStyleCost + packingCost + deliveryCost;
+  const totalCost = boardCost + edgeCost + processingCost + hardwareCost + kitchenOptionCost + doorStyleCost + packingCost + deliveryCost + retailOptionCost;
   const margin = totalCost * marginRate;
   const verdictResult = validateFurnitureInput(normalizedInput);
 
@@ -833,6 +867,9 @@ export function calculateQuote(input: FurnitureInput): QuoteResult {
     hardwareCost,
     packingCost,
     deliveryCost,
+    epPanelCost,
+    hoodDrillingCost,
+    accessoryCost,
     marginRate,
     margin,
     totalCost,
