@@ -1191,13 +1191,13 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   // 단, 상부장 단품의 fixtures는 소비자용 추가 옵션(EP 판넬·후드 타공·부속)이라 간편 모드에서도 노출.
   // 소재는 미리보기 우측 패널로, 검수·주문은 하단 CTA(주문 버튼)로 이동 — 상단 카테고리 버튼 수를 줄인다.
   const categories = getEditorCategories(activeInput.productType, isPro).filter(
-    (c) => (isPro || c.id !== "fixtures" || activeInput.productType.startsWith("kitchen")) && c.id !== "material" && c.id !== "check",
+    (c) => (isPro || c.id !== "fixtures" || activeInput.productType.startsWith("kitchen")) && c.id !== "material" && c.id !== "check" && c.id !== "spec" && c.id !== "doors",
   );
   // effectiveCat: 데스크톱 2분할 패널이 항상 표시할 칸(미선택 시 첫 칸). 모바일 팝업은 activeCat != null일 때만 뜬다.
   const effectiveCat = activeCat ?? categories[0]?.id ?? null;
   // 검수·주문은 카테고리 버튼에서 뺐지만(하단 CTA로 진입) 팝업 제목은 필요 — 폴백 라벨
-  const activeLabel = categories.find((cat) => cat.id === activeCat)?.label ?? (activeCat === "check" ? "검수·주문" : "");
-  const effectiveLabel = categories.find((cat) => cat.id === effectiveCat)?.label ?? (effectiveCat === "check" ? "검수·주문" : "");
+  const activeLabel = categories.find((cat) => cat.id === activeCat)?.label ?? (activeCat === "check" ? "검수·주문" : activeCat === "fixtures" ? "추가 옵션" : "");
+  const effectiveLabel = categories.find((cat) => cat.id === effectiveCat)?.label ?? (effectiveCat === "check" ? "검수·주문" : effectiveCat === "fixtures" ? "추가 옵션" : "");
   const beginnerSteps = [
     { id: "spec", label: "치수", hint: activeInput.productType === "kitchen_full_set" ? "전체 길이와 칸 수를 먼저 맞추세요." : "가로·높이·깊이를 먼저 맞추세요." },
     { id: "modules", label: "구성", hint: "3D에서 칸을 누르고 서랍장·문장·오픈장으로 바꾸세요." },
@@ -1487,7 +1487,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   return (
       <EditorShell
       overlay
-      categories={showStartChoice ? [] : categories}
+      categories={[]}
       activeCat={activeCat}
       effectiveCat={effectiveCat}
       onSelectCat={setActiveCat}
@@ -1498,12 +1498,38 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       toolbar={showStartChoice ? null : (
         <>
           <span className="shrink-0 px-1 text-[12px] font-black text-ink">{isManual && manualTitle ? manualTitle : product.name}</span>
-          <div className="inline-flex shrink-0 rounded-full border border-slate-200 bg-white p-0.5 text-[10px] font-black">
-            {([{ value: "consumer", label: "간편" }, { value: "professional", label: "전문가" }] as const).map((mode) => (
-              <button key={mode.value} type="button" onClick={() => update("customer_type", mode.value)} className={`rounded-full px-2.5 py-1 transition ${(input.customer_type ?? "consumer") === mode.value ? "bg-brand text-white" : "text-slate-500"}`}>{mode.label}</button>
+          {/* 보기/수정 — 상단으로 승격(간편/전문가 토글 대체) */}
+          <div data-coach="mode" className="inline-flex shrink-0 rounded-full border border-slate-200 bg-white p-0.5 text-[11px] font-black">
+            {([["view", "보기"], ["edit", "수정"]] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setCanvasMode(mode);
+                  if (mode === "view") {
+                    setRoomSelected(null);
+                    setRoomGuides([]);
+                    setAddOpen(false);
+                  }
+                }}
+                className={`rounded-full px-3 py-1.5 transition ${canvasMode === mode ? "bg-brand text-white" : "text-slate-500"}`}
+              >
+                {label}
+              </button>
             ))}
           </div>
-          <button type="button" title="AI로 만들기" aria-label="AI로 만들기" onClick={() => setChatOpen((v) => !v)} className={`grid h-9 shrink-0 place-items-center rounded-full border px-3 text-[12px] font-black transition ${chatOpen ? "border-brand bg-brand text-white" : "border-brand/40 bg-white text-brand"}`}>AI</button>
+          {categories.some((c) => c.id === "fixtures") && (
+            <button
+              type="button"
+              title="추가 옵션 (EP·타공·부속)"
+              aria-label="추가 옵션"
+              onClick={() => setActiveCat(activeCat === "fixtures" ? null : "fixtures")}
+              className={`ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-full border text-base transition ${activeCat === "fixtures" ? "border-brand bg-brand text-white" : "border-slate-200 bg-white text-slate-600"}`}
+            >
+              🚰
+            </button>
+          )}
+          <button type="button" title="AI로 만들기" aria-label="AI로 만들기" onClick={() => setChatOpen((v) => !v)} className={`${categories.some((c) => c.id === "fixtures") ? "" : "ml-auto "}grid h-9 shrink-0 place-items-center rounded-full border px-3 text-[12px] font-black transition ${chatOpen ? "border-brand bg-brand text-white" : "border-brand/40 bg-white text-brand"}`}>AI</button>
           {!previewFullScreen && (
             <div className="hidden shrink-0 items-center sm:flex">
               <div className="rounded-l-full bg-amber-100 px-3 py-1.5 text-[11px] font-black text-amber-900 ring-1 ring-amber-200">
@@ -1564,26 +1590,6 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
 
               {/* 통합 툴바 — 보기/수정 모드 · 치수 · 문열림 · 자동정렬 · 실행취소를 한 곳에(글래스 바) */}
               <div className="pointer-events-auto absolute left-3 top-3 z-20 flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-white/85 p-1 shadow-lg shadow-slate-900/5 backdrop-blur-md">
-                <div data-coach="mode" className="flex rounded-xl bg-slate-100/80 p-0.5 text-[11px] font-black">
-                  {([["view", "보기"], ["edit", "수정"]] as const).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => {
-                        setCanvasMode(mode);
-                        if (mode === "view") {
-                          setRoomSelected(null);
-                          setRoomGuides([]);
-                          setAddOpen(false);
-                        }
-                      }}
-                      className={`rounded-lg px-2.5 py-1.5 transition ${canvasMode === mode ? "bg-white text-brand shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mx-0.5 h-5 w-px bg-slate-200" />
                 <button type="button" title="치수 표시" aria-label="치수 표시" aria-pressed={showDimensions} onClick={() => setShowDimensions((v) => !v)} className={`grid h-8 w-8 place-items-center rounded-xl transition ${showDimensions ? "bg-brand text-white" : "text-slate-500 hover:bg-slate-100"}`}>
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="8" width="18" height="8" rx="1.5" /><path d="M7 8v3M11 8v4M15 8v3M19 8v4" strokeLinecap="round" /></svg>
                 </button>
