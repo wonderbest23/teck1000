@@ -637,6 +637,7 @@ export function RoomScene({
       });
     }
     groups.push({
+      collapsed: true,
       heading: "하부장 전체",
       rows: [
         { key: "base-height", label: "높이", value: dims.baseHeightMm, min: KITCHEN_DIMENSION_LIMITS.baseHeight.min, max: KITCHEN_DIMENSION_LIMITS.baseHeight.max, step: KITCHEN_DIMENSION_LIMITS.baseHeight.step, onChange: (mm) => commitKi({ ...ki, height_mm: mm, kitchen_base_height_mm: mm }) },
@@ -644,6 +645,7 @@ export function RoomScene({
       ],
     });
     groups.push({
+      collapsed: true,
       heading: "상부장 전체",
       rows: [
         { key: "wall-height", label: "높이", value: dims.wallHeightMm, min: KITCHEN_DIMENSION_LIMITS.wallHeight.min, max: KITCHEN_DIMENSION_LIMITS.wallHeight.max, step: KITCHEN_DIMENSION_LIMITS.wallHeight.step, onChange: (mm) => commitKi({ ...ki, kitchen_wall_height_mm: mm }) },
@@ -691,6 +693,9 @@ export function RoomScene({
                   </button>
                 ))}
               </div>
+              <details className="rounded-xl bg-soft/70 px-2.5 py-2">
+                <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden text-[10px] font-black text-slate-500">문·손잡이 <span className="text-slate-400">▾</span></summary>
+                <div className="mt-2 space-y-1.5">
               {showSwing && (
                 <div className="flex items-center gap-1">
                   <span className="w-8 shrink-0 text-[10px] font-black text-slate-500">문</span>
@@ -719,6 +724,8 @@ export function RoomScene({
                   </button>
                 ))}
               </div>
+                </div>
+              </details>
               <div className="flex gap-1 pt-0.5">
                 <button
                   type="button"

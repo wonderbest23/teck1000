@@ -18,7 +18,7 @@ export type SizeRow = {
   onChange: (mm: number) => void;
 };
 
-export type SizeGroup = { heading?: string; rows: SizeRow[] };
+export type SizeGroup = { heading?: string; rows: SizeRow[]; collapsed?: boolean };
 
 export type PanelMaterial = { name: string; color: string; tone: string };
 
@@ -142,14 +142,28 @@ export function SceneSizePanel({
         </div>
       )}
       {children}
-      {groups.map((group, index) => (
-        <div key={group.heading ?? index} className="space-y-1.5">
-          {group.heading && <div className="text-[10px] font-black text-slate-400">{group.heading}</div>}
-          {group.rows.map((row) => (
-            <StepperRow key={row.key} row={row} />
-          ))}
-        </div>
-      ))}
+      {groups.map((group, index) =>
+        group.collapsed ? (
+          /* 부가 치수는 접어서 — 패널을 핵심만 보이게 유지 */
+          <details key={group.heading ?? index} className="rounded-xl bg-soft/70 px-2.5 py-2">
+            <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden text-[10px] font-black text-slate-500">
+              {group.heading} <span className="text-slate-400">▾</span>
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              {group.rows.map((row) => (
+                <StepperRow key={row.key} row={row} />
+              ))}
+            </div>
+          </details>
+        ) : (
+          <div key={group.heading ?? index} className="space-y-1.5">
+            {group.heading && <div className="text-[10px] font-black text-slate-400">{group.heading}</div>}
+            {group.rows.map((row) => (
+              <StepperRow key={row.key} row={row} />
+            ))}
+          </div>
+        ),
+      )}
       <p className="text-[9px] font-bold leading-4 text-slate-400">
         단위 mm · −/＋ 또는 직접 입력 후 Enter
         <span className="mt-0.5 hidden sm:block">단축키: 화살표 이동 · Shift+화살표 크기 · Alt+↑↓ 깊이 · R 회전 · Del 삭제 · Esc 해제</span>
