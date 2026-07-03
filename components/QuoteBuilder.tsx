@@ -718,9 +718,16 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     return null;
   })();
   // 핸들 드래그 리사이즈 — 잡은 쪽만 늘리고(앵커 center) 이웃/벽에 스냅 + 가이드, 침범은 막음
+  // 모든 경로(핸들·키보드·패널)가 제품 규격(productRules) 안으로 강제 클램프된다 — 규격 밖 상태 자체가 불가능(온톨로지)
   function resizeRoomItem(id: string, patch: Partial<FurnitureInput>, center?: { x: number; z: number }, dirArg?: { x: number; z: number }) {
     const item = roomItems.find((it) => it.id === id);
     if (!item) return;
+    const rr = productRules[item.input.productType];
+    if (rr) {
+      if (patch.width_mm != null) patch.width_mm = Math.min(rr.maxWidth, Math.max(rr.minWidth, Math.round(patch.width_mm)));
+      if (patch.height_mm != null) patch.height_mm = Math.min(rr.maxHeight, Math.max(rr.minHeight, Math.round(patch.height_mm)));
+      if (patch.depth_mm != null) patch.depth_mm = Math.min(rr.maxDepth, Math.max(rr.minDepth, Math.round(patch.depth_mm)));
+    }
     if (!center) {
       // 높이 조절 — 다른 가구의 윗면 높이(topY)와 4cm 이내면 파란 수평 레이저선 + 자동 스냅(수평 맞춤)
       if (patch.height_mm != null) {
@@ -735,6 +742,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
           if (otherTop == null) continue;
           if (Math.abs(baseY + heightMm / 1000 - otherTop) < SNAP_Y) {
             heightMm = Math.max(120, Math.round(((otherTop - baseY) * 1000) / 10) * 10);
+            if (rr) heightMm = Math.min(rr.maxHeight, Math.max(rr.minHeight, heightMm)); // 스냅도 규격 안에서만
             yGuide = { axis: "y", value: baseY + heightMm / 1000 };
             break;
           }
@@ -1370,27 +1378,14 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
       )}
 
       {canvasMode === "edit" && (
-        <div className="pointer-events-auto flex gap-1.5 overflow-x-auto rounded-2xl border border-white/65 bg-slate-950/78 p-1.5 shadow-lg shadow-slate-900/10 backdrop-blur-md">
-          <button type="button" onClick={() => quickAppendModule("door")} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
-            칸+
-          </button>
-          <button type="button" onClick={() => quickAppendModule("drawer")} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
-            서랍칸+
-          </button>
-          <button type="button" onClick={() => setActiveCat("spec")} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
-            치수
-          </button>
-          <button type="button" onClick={() => setActiveCat("doors")} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
-            문/서랍
-          </button>
-          <button type="button" onClick={() => duplicateRoomItem(activeRoomId)} className="shrink-0 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-black text-white hover:bg-white/22">
-            복제
-          </button>
-          <button type="button" onClick={() => removeRoomItem(activeRoomId)} className="shrink-0 rounded-xl bg-rose-500/90 px-3 py-2 text-[11px] font-black text-white hover:bg-rose-400">
-            삭제
-          </button>
-          <button type="button" onClick={() => setAddOpen((value) => !value)} className={`shrink-0 rounded-xl px-3 py-2 text-[11px] font-black ${addOpen ? "bg-white text-slate-950" : "bg-white/12 text-white hover:bg-white/22"}`}>
-            더보기
+        <div className="pointer-events-none flex justify-center">
+          {/* 편집(치수·문/서랍·복제·삭제)은 가구를 누르면 뜨는 패널의 −/＋ 토글로 통일 — 하단 바는 '추가'만 */}
+          <button
+            type="button"
+            onClick={() => setAddOpen((value) => !value)}
+            className={`pointer-events-auto flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[12px] font-black shadow-lg backdrop-blur-md transition active:scale-95 ${addOpen ? "bg-slate-900 text-white" : "border border-slate-200/70 bg-white/92 text-slate-700 hover:border-brand hover:text-brand"}`}
+          >
+            <span className="text-base leading-none">＋</span> 가구 추가
           </button>
         </div>
       )}
