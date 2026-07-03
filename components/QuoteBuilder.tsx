@@ -431,6 +431,42 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
     setRoomGuides([]);
     syncKitchenFinishes();
   }
+  // ── EP 엔드패널 자동 마감: 싱크대(세트·하부장)는 노출된 좌/우 옆면에 EP가 '항상' 자동으로 붙고,
+  //    옆에 다른 주방장이 딱 붙어 가려진 면은 자동으로 빠진다. ep_panel_sides(견적)도 함께 갱신. ──
+  useEffect(() => {
+    const kitchenKinds = ["kitchen_full_set", "kitchen_base_cabinet"];
+    roomItems.forEach((it) => {
+      if (!kitchenKinds.includes(it.input.productType)) return;
+      const p = roomPlacements[it.id];
+      const f = roomFootprints[it.id];
+      if (!p || !f) return;
+      let coverLeft = false;
+      let coverRight = false;
+      for (const other of roomItems) {
+        if (other.id === it.id) continue;
+        if (!other.input.productType.startsWith("kitchen")) continue;
+        const op = roomPlacements[other.id];
+        const of2 = roomFootprints[other.id];
+        if (!op || !of2) continue;
+        if (Math.abs(Math.sin(p.rotY - op.rotY)) > 0.02) continue; // 같은 벽(방향)만
+        // 내 로컬 좌표로 변환해 어느 쪽 옆면에 붙었는지 판정
+        const dx = op.x - p.x;
+        const dz = op.z - p.z;
+        const localX = dx * Math.cos(p.rotY) - dz * Math.sin(p.rotY);
+        const localZ = dx * Math.sin(p.rotY) + dz * Math.cos(p.rotY);
+        const touching = Math.abs(Math.abs(localX) - (f.widthM / 2 + of2.widthM / 2)) < 0.03 && Math.abs(localZ) < 0.1;
+        if (!touching) continue;
+        if (localX > 0) coverRight = true;
+        else coverLeft = true;
+      }
+      const sides = (coverLeft ? 0 : 1) + (coverRight ? 0 : 1);
+      if (it.input.ep_cover_left !== coverLeft || it.input.ep_cover_right !== coverRight || (it.input.ep_panel_sides ?? 0) !== sides) {
+        commitRoomItemById(it.id, { ...it.input, ep_cover_left: coverLeft, ep_cover_right: coverRight, ep_panel_sides: sides });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomItems, roomPlacements]);
+
   // 하부장 단품을 세트/다른 하부장 옆에 딱 붙이면(같은 벽·모서리 맞닿음) 걸레받이·상판을
   // 자동으로 이어받아 한 몸처럼 연결된다 — 실제 시공처럼 라인이 이어짐
   function syncKitchenFinishes() {

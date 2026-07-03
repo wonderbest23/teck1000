@@ -1299,6 +1299,18 @@ export function KitchenFullSetRenderer(props: PreviewRendererProps) {
         />
       ) : null;})}
       </group>
+      {/* EP 엔드패널 — 노출된 좌/우 옆면 자동 마감(도어 소재). 옆에 장이 붙은 면은 자동 제거 */}
+      {([["left", -1], ["right", 1]] as const).map(([side, sign]) => {
+        const covered = side === "left" ? input.ep_cover_left : input.ep_cover_right;
+        if (covered) return null;
+        const epX = sign * (w / 2 + 0.009);
+        return (
+          <group key={`ep-${side}`}>
+            <Panel size={[0.018, counterTopY, baseDepthM]} position={[epX, counterTopY / 2, 0]} color={material.color} edge={material.edge} />
+            <Panel size={[0.018, wallHeightM, wallDepthM]} position={[epX, KITCHEN_WALL_BOTTOM_M + wallHeightM / 2, wallBackZ]} color={material.color} edge={material.edge} />
+          </group>
+        );
+      })}
       {countertop.id !== "none" && (() => {
         // 싱크 자리에 실제 컷아웃을 낸 상판 — 구멍으로 싱크볼 내부가 그대로 보인다
         const sinkCut = sink.id !== "none"

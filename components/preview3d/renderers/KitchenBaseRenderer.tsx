@@ -6,7 +6,7 @@ import {
 } from "@/components/preview3d/constants";
 import { KitchenBaseModule } from "@/components/preview3d/kitchen/KitchenModules";
 import { getSinkFixtureSpec } from "@/components/preview3d/kitchen/sinkFixtureSpec";
-import { PreviewRoom } from "@/components/preview3d/primitives";
+import { Panel, PreviewRoom } from "@/components/preview3d/primitives";
 import { BoxDimensions } from "@/components/preview3d/primitives/DimensionMarkers";
 import { getMaterialPreset, materialPresets } from "@/components/preview3d/materials";
 import type { PreviewRendererProps } from "@/components/preview3d/types";
@@ -59,6 +59,13 @@ export function KitchenBaseRenderer(props: PreviewRendererProps) {
   return (
     <group rotation={[0, frontView ? 0 : -0.22, 0]}>
       {!embedded && <PreviewRoom widthM={w} depthM={depth} floorY={0} topY={KITCHEN_TOE_KICK_M + bodyH} />}
+      {/* EP 엔드패널 — 노출된 좌/우 옆면 자동 마감(가려진 면은 자동 제거) */}
+      {([["left", -1], ["right", 1]] as const).map(([side, sign]) => {
+        const covered = side === "left" ? input.ep_cover_left : input.ep_cover_right;
+        if (covered) return null;
+        const fullH = KITCHEN_TOE_KICK_M + bodyH;
+        return <Panel key={`ep-${side}`} size={[0.018, fullH, depth]} position={[sign * (w / 2 + 0.009), fullH / 2, 0]} color={material.color} edge={material.edge} />;
+      })}
       <KitchenBaseModule
         width={w}
         height={bodyH}

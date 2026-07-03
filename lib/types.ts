@@ -49,6 +49,9 @@ export type FurnitureInput = {
   microwave_option?: string;
   drawer_module_count?: number;
   pullout_module_count?: number;
+  /** EP 자동 마감 — 옆에 다른 주방장이 딱 붙어 가려진 면(자동 계산, 렌더·견적 공용) */
+  ep_cover_left?: boolean;
+  ep_cover_right?: boolean;
   /** 수납장(선반장/틈새장/신발장) 하단 서랍 단수 (0=없음, 최대 4) — 부품·레일 하드웨어에 반영 */
   storage_drawer_count?: number;
   /** 서랍통(서랍 몸통) 사양 — 기본 PB 15T / 자작합판 12T */
