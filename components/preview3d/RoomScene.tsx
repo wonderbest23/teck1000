@@ -369,6 +369,7 @@ export function RoomScene({
   onRemoveItem,
   selectedNotice,
   mobilePanelHost,
+  desktopPanelHost,
   showDimensions,
   doorsOpen,
   guides,
@@ -394,6 +395,8 @@ export function RoomScene({
   selectedNotice?: PanelNotice | null;
   /** 모바일용 패널 호스트 — 있으면 사이즈 패널을 이 엘리먼트(섹션 아래)에도 inline으로 포털 렌더 */
   mobilePanelHost?: HTMLElement | null;
+  /** 데스크톱 사이드바 호스트 — lg+에서 패널을 좌측 사이드바(IKEA식)로 포털, 우측 오버레이는 숨김 */
+  desktopPanelHost?: HTMLElement | null;
   showDimensions?: boolean;
   doorsOpen?: boolean;
   /** 정렬 가이드 — x/z(바닥) + y(높이 수평 맞춤 레이저선) */
@@ -915,8 +918,9 @@ export function RoomScene({
       </Canvas>
 
       {/* 사이즈 조절 패널 — 데스크톱: 캔버스 우측 오버레이 / 모바일: 섹션 아래 inline(미리보기를 가리지 않음) */}
-      {renderSizePanel?.("overlay")}
+      {renderSizePanel && <div className={desktopPanelHost ? "lg:hidden" : ""}>{renderSizePanel("overlay")}</div>}
       {mobilePanelHost && renderSizePanel && createPortal(<div className="sm:hidden">{renderSizePanel("inline")}</div>, mobilePanelHost)}
+      {desktopPanelHost && renderSizePanel && createPortal(<div className="hidden lg:block">{renderSizePanel("inline")}</div>, desktopPanelHost)}
 
       {/* 칸 편집 안내 — 3D 인라인 컨트롤(＋추가·삭제)과 우측 패널을 함께 안내 */}
       {editable && selectedKitchen && moduleIdx === null && (

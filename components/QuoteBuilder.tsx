@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { addConfiguredItem, clearCart, getCart, setCart } from "@/lib/cartStore";
-import { catalogCategories, productLabels, roomAddPresets } from "@/lib/catalog";
+import { catalogCategories, productFromPrice, productLabels, roomAddPresets } from "@/lib/catalog";
 import { ProductArt } from "@/components/ProductArt";
 import { RoomCommandChat } from "@/components/RoomCommandChat";
 import type { RoomAction, RoomStateSummary } from "@/lib/roomCommands";
@@ -148,6 +148,8 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   const [addCat, setAddCat] = useState<string>("kitchen"); // 가구추가 시트의 활성 카테고리(카테고리 우선 탐색)
   // 모바일: 사이즈 패널을 미리보기 위가 아니라 섹션 아래(belowCanvas)에 포털로 렌더 — 화면을 가리지 않게
   const [mobilePanelHost, setMobilePanelHost] = useState<HTMLDivElement | null>(null);
+  // IKEA식 좌측 사이드바(데스크톱) — 평소엔 상품 목록, 가구 선택 시 제품 옵션 패널이 이 호스트로 포털된다
+  const [sidePanelHost, setSidePanelHost] = useState<HTMLDivElement | null>(null);
   const [pickerSlug, setPickerSlug] = useState<ProductType | null>(null); // 규격 선택 단계(제품 누르면 사이즈 칩 표시)
   const [needCategory, setNeedCategory] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false); // AI 명령 채팅 패널
@@ -1370,7 +1372,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
   }
 
   const renderProductFlowPanel = () => (
-    <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex flex-col gap-1.5">
+    <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex flex-col gap-1.5 lg:hidden">
       {addOpen && (
         <div className="pointer-events-auto max-h-[42dvh] overflow-y-auto rounded-2xl border border-white/65 bg-white/92 p-3 shadow-xl shadow-slate-900/10 backdrop-blur-md">
           {addSheetBody}
@@ -1470,6 +1472,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                   <ProductArt slug={slug} className="h-12 w-12 transition group-hover:scale-105" />
                 </span>
                 <span className="line-clamp-1 w-full text-center text-[11px] font-black text-slate-700">{productLabels[slug] ?? slug}</span>
+                {productFromPrice[slug] && <span className="text-[10px] font-black text-ink">₩{productFromPrice[slug]!.toLocaleString("ko-KR")}~</span>}
                 <span className="text-[9px] font-bold text-slate-400">{hasPresets ? "규격 선택 →" : "바로 추가"}</span>
               </button>
             );
@@ -1548,7 +1551,21 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
         </>
       )}
       canvas={
-        <div className="relative h-full w-full">
+        <div className="flex h-full w-full">
+          {/* IKEA식 좌측 사이드바 — 상품 카드 목록 상시, 가구 선택 시 제품 옵션으로 전환 */}
+          {!showStartChoice && (
+            <aside className="hidden w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-slate-200 bg-white p-3 lg:flex">
+              <div ref={setSidePanelHost} className="empty:hidden" />
+              {roomSelected ? (
+                <p className="rounded-xl bg-soft px-3 py-2 text-[11px] font-bold leading-5 text-slate-500">
+                  선택을 해제(Esc)하면 상품 목록이 다시 표시됩니다.
+                </p>
+              ) : (
+                <div>{addSheetBody}</div>
+              )}
+            </aside>
+          )}
+        <div className="relative h-full min-w-0 flex-1">
           {showStartChoice ? (
             renderStartChoice()
           ) : (
@@ -1580,11 +1597,11 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
                   ]}
                 />
               )}
-              <RoomScene items={roomItems} placements={roomPlacements} selectedId={roomSelected} highlightId={justAddedId} expert={isPro} editable={canvasMode === "edit"} onSelect={setRoomSelected} onMove={moveRoomItem} onMoveEnd={endRoomMove} onResize={resizeRoomItem} onCommitItem={commitRoomItemById} onRotateItem={rotateRoomItem} onDuplicateItem={duplicateRoomItem} onRemoveItem={removeRoomItem} selectedNotice={selectedNotice} mobilePanelHost={mobilePanelHost} showDimensions={showDimensions} doorsOpen={doorsOpen} guides={roomGuides} floor={roomFloor} />
+              <RoomScene items={roomItems} placements={roomPlacements} selectedId={roomSelected} highlightId={justAddedId} expert={isPro} editable={canvasMode === "edit"} onSelect={setRoomSelected} onMove={moveRoomItem} onMoveEnd={endRoomMove} onResize={resizeRoomItem} onCommitItem={commitRoomItemById} onRotateItem={rotateRoomItem} onDuplicateItem={duplicateRoomItem} onRemoveItem={removeRoomItem} selectedNotice={selectedNotice} mobilePanelHost={mobilePanelHost} desktopPanelHost={sidePanelHost} showDimensions={showDimensions} doorsOpen={doorsOpen} guides={roomGuides} floor={roomFloor} />
               {renderProductFlowPanel()}
 
               {/* 통합 툴바 — 보기/수정 모드 · 치수 · 문열림 · 자동정렬 · 실행취소를 한 곳에(글래스 바) */}
-              <div className="pointer-events-auto absolute left-3 top-3 z-20 flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-white/85 p-1 shadow-lg shadow-slate-900/5 backdrop-blur-md">
+              <div className="pointer-events-auto absolute left-3 top-3 z-20 flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-white/85 p-1 shadow-lg shadow-slate-900/5 backdrop-blur-md lg:left-1/2 lg:top-auto lg:bottom-3 lg:-translate-x-1/2">
                 <button type="button" title="치수 표시" aria-label="치수 표시" aria-pressed={showDimensions} onClick={() => setShowDimensions((v) => !v)} className={`grid h-8 w-8 place-items-center rounded-xl transition ${showDimensions ? "bg-brand text-white" : "text-slate-500 hover:bg-slate-100"}`}>
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="8" width="18" height="8" rx="1.5" /><path d="M7 8v3M11 8v4M15 8v3M19 8v4" strokeLinecap="round" /></svg>
                 </button>
@@ -1658,6 +1675,7 @@ export function QuoteBuilder({ productType }: { productType: ProductType }) {
           )}
           </>
           )}
+        </div>
         </div>
       }
       belowCanvas={
